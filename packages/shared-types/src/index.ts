@@ -94,4 +94,4 @@ export interface FounderRoute {
   geojson: RouteGeoJsonFeatureCollection;
 }
 
-export * from "./errors.js";
+export * from "./errors";
