@@ -1,0 +1,157 @@
+{
+  "version": "1.0.0",
+  "services": [
+    {
+      "name": "resource-service",
+      "basePath": "/",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/resources",
+          "summary": "List startup resources with optional filters",
+          "requestContract": "query: category, city, stage, industry, q, limit, offset, lat, lng, radiusMiles",
+          "successContract": "{ resources: StartupResource[], count: number }",
+          "errorCodes": ["VALIDATION_ERROR"]
+        },
+        {
+          "method": "GET",
+          "path": "/resources/:id",
+          "summary": "Get resource by id",
+          "requestContract": "params: { id: uuid }",
+          "successContract": "StartupResource",
+          "errorCodes": ["VALIDATION_ERROR", "NOT_FOUND"]
+        },
+        {
+          "method": "POST",
+          "path": "/resources/search",
+          "summary": "Search resources by structured body",
+          "requestContract": "body: same filters as GET /resources",
+          "successContract": "{ resources: StartupResource[], count: number }",
+          "errorCodes": ["VALIDATION_ERROR"]
+        },
+        {
+          "method": "GET",
+          "path": "/resources/map-data",
+          "summary": "Get GeoJSON payload for map rendering",
+          "requestContract": "query: same filters as GET /resources",
+          "successContract": "ResourceFeatureCollection",
+          "errorCodes": ["VALIDATION_ERROR"]
+        },
+        {
+          "method": "GET",
+          "path": "/resources/categories",
+          "summary": "List available resource categories",
+          "requestContract": "none",
+          "successContract": "{ categories: string[] }",
+          "errorCodes": []
+        }
+      ]
+    },
+    {
+      "name": "intelligence-service",
+      "basePath": "/",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/intelligence/analyze-founder",
+          "summary": "Generate structured founder analysis",
+          "requestContract": "body: FounderAnalysisInputSchema",
+          "successContract": "{ analysis, snapshotId, metadata }",
+          "errorCodes": ["VALIDATION_ERROR", "DEPENDENCY_UNAVAILABLE"]
+        },
+        {
+          "method": "POST",
+          "path": "/intelligence/explain-recommendation",
+          "summary": "Generate human-readable recommendation explanation",
+          "requestContract": "body: ExplainRecommendationInputSchema",
+          "successContract": "{ explanation, metadata }",
+          "errorCodes": ["VALIDATION_ERROR", "DEPENDENCY_UNAVAILABLE"]
+        },
+        {
+          "method": "POST",
+          "path": "/intelligence/generate-roadmap",
+          "summary": "Generate roadmap based on analysis and recommendations",
+          "requestContract": "body: RoadmapInputSchema",
+          "successContract": "{ roadmap, metadata }",
+          "errorCodes": ["VALIDATION_ERROR", "DEPENDENCY_UNAVAILABLE"]
+        },
+        {
+          "method": "GET",
+          "path": "/intelligence/analysis/:snapshotId",
+          "summary": "Get saved analysis snapshot",
+          "requestContract": "params: { snapshotId: uuid }",
+          "successContract": "analysis snapshot",
+          "errorCodes": ["VALIDATION_ERROR", "NOT_FOUND"]
+        }
+      ]
+    },
+    {
+      "name": "recommendation-service",
+      "basePath": "/",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/recommendations/generate",
+          "summary": "Generate recommendations end-to-end",
+          "requestContract": "body: GenerateRecommendationsRequestSchema",
+          "successContract": "{ recommendations, count }",
+          "errorCodes": ["VALIDATION_ERROR"]
+        },
+        {
+          "method": "POST",
+          "path": "/recommendations/rank",
+          "summary": "Rank pre-fetched resources with deterministic scoring",
+          "requestContract": "body: RankRecommendationsRequestSchema",
+          "successContract": "{ recommendations, count }",
+          "errorCodes": ["VALIDATION_ERROR"]
+        },
+        {
+          "method": "GET",
+          "path": "/recommendations/replay/:founderProfileId",
+          "summary": "Replay recommendations for a founder profile",
+          "requestContract": "params: { founderProfileId: uuid }",
+          "successContract": "{ recommendations, count }",
+          "errorCodes": ["VALIDATION_ERROR"]
+        }
+      ]
+    },
+    {
+      "name": "routing-service",
+      "basePath": "/",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/routing/route",
+          "summary": "Compute route geometry for ordered coordinates",
+          "requestContract": "body: RouteRequestSchema",
+          "successContract": "route payload",
+          "errorCodes": ["VALIDATION_ERROR", "DEPENDENCY_UNAVAILABLE"]
+        },
+        {
+          "method": "POST",
+          "path": "/routing/matrix",
+          "summary": "Compute travel time matrix",
+          "requestContract": "body: MatrixRequestSchema",
+          "successContract": "matrix payload",
+          "errorCodes": ["VALIDATION_ERROR", "DEPENDENCY_UNAVAILABLE"]
+        },
+        {
+          "method": "POST",
+          "path": "/routing/trip",
+          "summary": "Optimize trip order",
+          "requestContract": "body: TripRequestSchema",
+          "successContract": "trip payload",
+          "errorCodes": ["VALIDATION_ERROR", "DEPENDENCY_UNAVAILABLE"]
+        },
+        {
+          "method": "POST",
+          "path": "/routing/founder-path",
+          "summary": "Compute founder-optimized route over ranked resources",
+          "requestContract": "body: FounderPathRequestSchema",
+          "successContract": "FounderRoute",
+          "errorCodes": ["VALIDATION_ERROR", "DEPENDENCY_UNAVAILABLE"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: founder-gps-postgres
+    ports:
+      - "55432:5432"
+    environment:
+      POSTGRES_DB: founder_gps
+      POSTGRES_USER: founder
+      POSTGRES_PASSWORD: founderpass
+    volumes:
+      - founder_gps_postgres_data:/var/lib/postgresql/data
+
+  osrm:
+    image: osrm/osrm-backend:latest
+    container_name: founder-gps-osrm
+    command: osrm-routed --algorithm mld /data/utah-latest.osrm
+    ports:
+      - "5000:5000"
+    volumes:
+      - ${OSRM_DATA_PATH:-/Users/stephenwarren/Developer/opswift/monorepo/osrm-data}:/data:ro
+
+volumes:
+  founder_gps_postgres_data:

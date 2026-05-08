@@ -1,0 +1,18 @@
+{
+  "name": "founder-gps",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "lint": "pnpm typecheck",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "docs:generate": "node scripts/generate-api-docs.mjs"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.12",
+    "typescript": "^5.6.3"
+  }
+}
