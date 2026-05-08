@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { verifyOsrmArtifacts } from "../src/startup-checks.js";
 
 const requiredSuffixes = [
-  "",
   ".cells",
   ".cell_metrics",
   ".mldgr",
@@ -41,7 +40,11 @@ describe("OSRM startup checks", () => {
     });
     tempDirs.push(dir);
 
-    await writeFile(path.join(dir, "utah-latest.osrm"), "");
+    await Promise.all(
+      requiredSuffixes
+        .filter((suffix) => suffix !== ".mldgr")
+        .map((suffix) => writeFile(path.join(dir, `utah-latest.osrm${suffix}`), ""))
+    );
 
     await expect(verifyOsrmArtifacts(dir, "utah-latest.osrm")).rejects.toThrow(
       /Missing OSRM artifacts/

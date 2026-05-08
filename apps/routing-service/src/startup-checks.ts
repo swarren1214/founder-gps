@@ -2,7 +2,6 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 
 const MLD_REQUIRED_SUFFIXES = [
-  "",
   ".cells",
   ".cell_metrics",
   ".mldgr",
