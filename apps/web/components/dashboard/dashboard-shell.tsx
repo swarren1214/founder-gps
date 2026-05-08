@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { founderFlowResponseSchema, type FounderFlowResponse } from "@/lib/schemas";
@@ -17,12 +17,51 @@ export function DashboardShell() {
   const { isLoading, isOnboarded, run } = useOnboardingGate();
   const [currentRun, setCurrentRun] = useState<FounderFlowResponse | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [showPins, setShowPins] = useState(true);
+  const hasAttemptedStartupHydration = useRef(false);
 
   useEffect(() => {
     if (run) {
+      hasAttemptedStartupHydration.current = false;
       setCurrentRun(run);
     }
   }, [run]);
+
+  useEffect(() => {
+    if (!currentRun || currentRun.startups.length > 0 || hasAttemptedStartupHydration.current) {
+      return;
+    }
+
+    hasAttemptedStartupHydration.current = true;
+
+    const hydrateStartups = async () => {
+      try {
+        const response = await fetch("/api/startups?limit=1000", { cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Failed to load startup profiles.");
+        }
+
+        if (!Array.isArray(payload.startups) || payload.startups.length === 0) {
+          return;
+        }
+
+        setCurrentRun((existing) => {
+          if (!existing) {
+            return existing;
+          }
+
+          const mergedRun = { ...existing, startups: payload.startups };
+          saveDashboardRun(mergedRun);
+          return mergedRun;
+        });
+      } catch {
+        // Startup hydration is a best-effort fallback for older session payloads.
+      }
+    };
+
+    void hydrateStartups();
+  }, [currentRun]);
 
   useEffect(() => {
     if (!isLoading && !isOnboarded) {
@@ -89,26 +128,33 @@ export function DashboardShell() {
     });
   }
 
-  const { founderProfile, recommendations, route, resources } = currentRun;
+  const { founderProfile, recommendations, route, resources, startups } = currentRun;
 
   return (
-    <div className="grid min-h-[calc(100vh)] grid-cols-1 items-start xl:grid-cols-[minmax(320px,380px)_minmax(0,1fr)] 2xl:gap-5">
-      <motion.div className="min-w-0" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
-        <DashboardControls run={currentRun} isRetrying={isRetrying} retryError={retryError} onRetry={retryRun} />
-      </motion.div>
+    <div className="relative h-full w-full overflow-hidden">
+      {/* Map fills the entire background */}
+      <FounderMap
+        showPins={showPins}
+        className="absolute inset-0 h-full w-full rounded-none"
+        resources={resources}
+        startups={startups}
+        recommendations={recommendations}
+        route={route}
+        founderLocation={{
+          city: founderProfile.locationCity,
+          lat: founderProfile.locationLat,
+          lng: founderProfile.locationLng
+        }}
+      />
 
-      <motion.div className="min-w-0" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
-        <FounderMap
-          className="h-[calc(100vh-5rem)] min-h-[640px] max-h-none rounded-none"
-          resources={resources}
-          recommendations={recommendations}
-          route={route}
-          founderLocation={{
-            city: founderProfile.locationCity,
-            lat: founderProfile.locationLat,
-            lng: founderProfile.locationLng
-          }}
-        />
+      {/* Controls panel floats over the map */}
+      <motion.div
+        className="absolute left-4 top-4 bottom-4 z-10 w-[420px] overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/10"
+        initial={{ opacity: 0, x: -16 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.25 }}
+      >
+        <DashboardControls run={currentRun} isRetrying={isRetrying} retryError={retryError} onRetry={retryRun} showPins={showPins} onTogglePins={() => setShowPins((v) => !v)} />
       </motion.div>
     </div>
   );

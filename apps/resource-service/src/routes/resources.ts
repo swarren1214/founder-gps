@@ -17,6 +17,13 @@ const querySchema = z.object({
   radiusMiles: z.coerce.number().positive().max(250).optional()
 });
 
+const startupQuerySchema = z.object({
+  city: z.string().min(1).optional(),
+  q: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(2000).optional(),
+  offset: z.coerce.number().int().min(0).optional()
+});
+
 const searchBodySchema = z
   .object({
     category: z.enum(RESOURCE_CATEGORIES).optional(),
@@ -33,6 +40,17 @@ const searchBodySchema = z
   .strict();
 
 export async function resourceRoutes(app: FastifyInstance, repository: ResourceRepository) {
+  app.get("/startups", async (request, reply) => {
+    const parsed = startupQuerySchema.safeParse(request.query);
+
+    if (!parsed.success) {
+      return sendApiError(reply, "VALIDATION_ERROR", "Invalid startups query.", parsed.error.flatten());
+    }
+
+    const startups = await repository.startups(parsed.data);
+    return reply.send({ startups, count: startups.length });
+  });
+
   app.get("/resources", async (request, reply) => {
     const parsed = querySchema.safeParse(request.query);
 

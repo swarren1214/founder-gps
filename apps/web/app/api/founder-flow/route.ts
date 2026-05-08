@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { founderFlowResponseSchema, founderIntakeSchema, type FounderIntake } from "@/lib/schemas";
-import type { StartupResource } from "@founder-gps/shared-types";
+import type { StartupProfile, StartupResource } from "@founder-gps/shared-types";
 
 const serviceConfig = {
   resource: process.env.NEXT_PUBLIC_RESOURCE_SERVICE_URL ?? "http://localhost:4001",
@@ -84,6 +84,19 @@ async function fetchResources(input: FounderIntake, requestId: string): Promise<
   return payload.resources;
 }
 
+async function fetchStartups(_input: FounderIntake, requestId: string): Promise<StartupProfile[]> {
+  const query = new URLSearchParams();
+  query.set("limit", "1000");
+
+  const response = await fetchWithTimeout(
+    `${serviceConfig.resource}/startups?${query.toString()}`,
+    { timeout: 8000 },
+    requestId
+  );
+  const payload = await parseJson(response);
+  return payload.startups;
+}
+
 export async function POST(request: Request) {
   const requestId = generateRequestId();
   
@@ -140,6 +153,14 @@ export async function POST(request: Request) {
         { error: `Resource service error: ${errorMsg}`, requestId },
         { status: 503 }
       );
+    }
+
+    let startups: StartupProfile[] = [];
+    try {
+      startups = await fetchStartups(founderProfile, requestId);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Startup list unavailable";
+      warnings.push(`⚠️ Startup profiles unavailable: ${errorMsg}. Startups tab may be empty.`);
     }
 
     // Step 3: Generate recommendations
@@ -254,6 +275,7 @@ export async function POST(request: Request) {
       route,
       roadmap,
       resources,
+      startups,
       warnings
     });
 

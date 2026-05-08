@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckSquare, Compass, RefreshCw, Route, Sparkles } from "lucide-react";
+import { AlertTriangle, Building2, Compass, MapPin, RefreshCw, Route, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -12,47 +12,44 @@ type DashboardControlsProps = {
   isRetrying: boolean;
   retryError: string | null;
   onRetry: () => void;
+  showPins: boolean;
+  onTogglePins: () => void;
 };
 
-export function DashboardControls({ run, isRetrying, retryError, onRetry }: DashboardControlsProps) {
-  const { founderProfile, analysis, recommendations, route, roadmap, warnings } = run;
-  const roadmapTasks = roadmap
-    ? roadmap.weeks.flatMap((week) =>
-        week.tasks.map((task) => ({
-          id: `${week.weekNumber}-${task.title}`,
-          weekNumber: week.weekNumber,
-          title: task.title,
-          description: task.description
-        }))
-      )
-    : [];
+export function DashboardControls({ run, isRetrying, retryError, onRetry, showPins, onTogglePins }: DashboardControlsProps) {
+  const { founderProfile, analysis, recommendations, route, roadmap, startups, warnings } = run;
 
   return (
-    <aside className="flex w-full h-full flex-col gap-4">
-      <div className="bg-card p-5 h-full overflow-y-scroll">
-        <Tabs defaultValue="overview" className="w-full flex-col gap-4">
-          <TabsList className="grid h-9 w-full grid-cols-3 rounded-lg bg-muted p-1 text-muted-foreground">
-            <TabsTrigger
-              value="overview"
-              className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              Overview
-            </TabsTrigger>
-            <TabsTrigger
-              value="roadmap"
-              className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              Roadmap
-            </TabsTrigger>
-            <TabsTrigger
-              value="tasks"
-              className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              Tasks
-            </TabsTrigger>
-          </TabsList>
+    <aside className="bg-card/75 backdrop-blur-lg p-5 h-full w-full overflow-y-scroll">
+      <Tabs defaultValue="overview" className="flex w-full flex-col gap-4">
+        <TabsList className="grid h-9 w-full grid-cols-4 rounded-lg bg-muted p-1 text-muted-foreground">
+          <TabsTrigger
+            value="overview"
+            className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            Overview
+          </TabsTrigger>
+          <TabsTrigger
+            value="roadmap"
+            className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            Roadmap
+          </TabsTrigger>
+          <TabsTrigger
+            value="startups"
+            className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            Startups
+          </TabsTrigger>
+          <TabsTrigger
+            value="resources"
+            className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            Resources
+          </TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="overview" className="space-y-4">
+        <TabsContent value="overview" className="space-y-4">
             <Card className="bg-[linear-gradient(135deg,rgba(0,33,66,0.96),rgba(67,167,157,0.62))] text-white">
               <Badge className="mb-4 border-white/20 bg-white/10 text-white">Founder dashboard</Badge>
               <CardTitle className="text-white">{founderProfile.locationCity} founder readiness snapshot</CardTitle>
@@ -113,9 +110,9 @@ export function DashboardControls({ run, isRetrying, retryError, onRetry }: Dash
                 ))}
               </ul>
             </div>
-          </TabsContent>
+        </TabsContent>
 
-          <TabsContent value="roadmap" className="space-y-3">
+        <TabsContent value="roadmap" className="space-y-3">
             <div className="mb-2 flex items-center gap-2">
               <Route className="h-4 w-4 text-primary" />
               <h4 className="font-semibold">30-day roadmap</h4>
@@ -140,43 +137,54 @@ export function DashboardControls({ run, isRetrying, retryError, onRetry }: Dash
             ) : (
               <CardDescription>No roadmap available yet.</CardDescription>
             )}
-          </TabsContent>
+        </TabsContent>
 
-          <TabsContent value="tasks" className="space-y-3">
+        <TabsContent value="startups" className="space-y-3">
             <div>
               <div className="mb-2 flex items-center gap-2">
-                <CheckSquare className="h-4 w-4 text-primary" />
-                <h4 className="font-semibold">Action tasks</h4>
+                <Building2 className="h-4 w-4 text-primary" />
+                <h4 className="font-semibold">Startup profiles</h4>
               </div>
 
-              {roadmapTasks.length > 0 ? (
+              {startups.length > 0 ? (
                 <div className="space-y-2">
-                  {roadmapTasks.map((task) => (
-                    <div key={task.id} className="rounded-2xl border border-border/70 bg-muted/35 px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Week {task.weekNumber}</p>
-                      <p className="mt-1 text-sm font-semibold text-foreground">{task.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{task.description}</p>
+                  {startups.map((startup) => (
+                    <div key={startup.id} className="rounded-2xl border border-border/70 bg-muted/35 px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{startup.name}</p>
+                          <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                            {startup.sector ?? "Uncategorized"}
+                          </p>
+                        </div>
+                        {startup.employees ? (
+                          <Badge className="bg-secondary/15 text-secondary">{startup.employees}</Badge>
+                        ) : null}
+                      </div>
+                      {startup.description ? (
+                        <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{startup.description}</p>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                        {startup.address ? <span>{startup.address}</span> : null}
+                        {startup.website ? (
+                          <a
+                            className="underline decoration-dotted underline-offset-2"
+                            href={startup.website.startsWith("http") ? startup.website : `https://${startup.website}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Website
+                          </a>
+                        ) : null}
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">
-                  No roadmap tasks yet. Generate or retry your founder run to populate tasks.
+                  No startup profiles are available for this run.
                 </div>
               )}
-            </div>
-
-            <div>
-              <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Recommendation actions</p>
-              <div className="space-y-2">
-                {recommendations.map((item, index) => (
-                  <div key={item.id} className="rounded-2xl border border-border/70 bg-muted/35 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Priority {index + 1}</p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">{item.resourceName}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{item.recommendedAction}</p>
-                  </div>
-                ))}
-              </div>
             </div>
 
             {warnings.length > 0 || retryError ? (
@@ -201,9 +209,42 @@ export function DashboardControls({ run, isRetrying, retryError, onRetry }: Dash
                 All services healthy. No active warnings.
               </div>
             )}
-          </TabsContent>
-        </Tabs>
-      </div>
+        </TabsContent>
+
+        <TabsContent value="resources" className="space-y-4">
+          <div className="mb-2 flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-primary" />
+            <h4 className="font-semibold">Map resources</h4>
+          </div>
+
+          <div className="rounded-2xl border border-border/70 bg-muted/35 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Show resource pins</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Toggle pins on the map</p>
+              </div>
+              <button
+                type="button"
+                onClick={onTogglePins}
+                aria-pressed={showPins}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${showPins ? "bg-primary" : "bg-muted-foreground/30"}`}
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition-transform ${showPins ? "translate-x-5" : "translate-x-0"}`} />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {run.resources.map((resource) => (
+              <div key={resource.id} className="rounded-2xl border border-border/70 bg-muted/35 px-3 py-2.5">
+                <p className="text-sm font-semibold">{resource.name}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground capitalize">{resource.category.replaceAll("_", " ")}</p>
+              </div>
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
+
     </aside>
   );
 }

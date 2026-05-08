@@ -49,8 +49,10 @@ export default function MapPage() {
       <FounderMap
         className="h-[calc(100vh-4rem)] min-h-[calc(100vh-4rem)] w-full rounded-none"
         resources={run.resources}
+        startups={run.startups}
         recommendations={run.recommendations}
         route={run.route}
+        showPins={true}
         founderLocation={{
           city: run.founderProfile.locationCity,
           lat: run.founderProfile.locationLat,

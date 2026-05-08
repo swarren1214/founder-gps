@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   ResourceCategory,
   ResourceFeatureCollection,
+  StartupProfile,
   StartupResource
 } from "@founder-gps/shared-types";
 import { buildApp } from "../src/app.js";
@@ -59,6 +60,29 @@ class InMemoryResourceRepository implements ResourceRepository {
 
   async getById(id: string) {
     return fixtureResources.find((r) => r.id === id) ?? null;
+  }
+
+  async startups(): Promise<StartupProfile[]> {
+    return [
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        name: "Demo Startup",
+        website: "https://demo-startup.com",
+        employees: "11-50",
+        sector: "B2B Software",
+        yearFounded: null,
+        linkedin: null,
+        description: "Demo startup profile",
+        address: "Lehi, UT",
+        hiringStatus: null,
+        jobPostings: [],
+        photoGallery: [],
+        lat: 40.3916,
+        lng: -111.8508,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ];
   }
 
   async mapData(): Promise<ResourceFeatureCollection> {
@@ -121,5 +145,17 @@ describe("resource routes", () => {
     const body = response.json();
     expect(body.type).toBe("FeatureCollection");
     expect(body.features.length).toBe(2);
+  });
+
+  it("returns startup profiles", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/startups"
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.count).toBe(1);
+    expect(body.startups[0].name).toBe("Demo Startup");
   });
 });

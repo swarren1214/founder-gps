@@ -12,3 +12,10 @@ export type ResourceFilters = {
   lng?: number;
   radiusMiles?: number;
 };
+
+export type StartupFilters = {
+  city?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+};

@@ -2,12 +2,14 @@ import { Pool, type QueryResultRow } from "pg";
 import type {
   ResourceCategory,
   ResourceFeatureCollection,
+  StartupProfile,
   StartupResource
 } from "@founder-gps/shared-types";
-import type { ResourceFilters } from "./types.js";
+import type { ResourceFilters, StartupFilters } from "./types.js";
 
 export interface ResourceRepository {
   list(filters: ResourceFilters): Promise<StartupResource[]>;
+  startups(filters: StartupFilters): Promise<StartupProfile[]>;
   getById(id: string): Promise<StartupResource | null>;
   mapData(filters: ResourceFilters): Promise<ResourceFeatureCollection>;
   categories(): Promise<ResourceCategory[]>;
@@ -29,6 +31,27 @@ function toResource(row: QueryResultRow): StartupResource {
     stageFit: row.stage_fit,
     industryFit: row.industry_fit,
     tags: row.tags,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString()
+  };
+}
+
+function toStartupProfile(row: QueryResultRow): StartupProfile {
+  return {
+    id: row.id,
+    name: row.name,
+    website: row.website,
+    employees: row.employees,
+    sector: row.sector,
+    yearFounded: row.year_founded,
+    linkedin: row.linkedin,
+    description: row.description,
+    address: row.address,
+    hiringStatus: row.hiring_status,
+    jobPostings: Array.isArray(row.job_postings) ? row.job_postings : [],
+    photoGallery: Array.isArray(row.photo_gallery) ? row.photo_gallery : [],
+    lat: typeof row.lat === "number" ? row.lat : row.lat === null ? null : Number(row.lat),
+    lng: typeof row.lng === "number" ? row.lng : row.lng === null ? null : Number(row.lng),
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString()
   };
@@ -111,6 +134,48 @@ export class PgResourceRepository implements ResourceRepository {
 
     const result = await this.pool.query(query, params);
     return result.rows.map(toResource);
+  }
+
+  async startups(filters: StartupFilters): Promise<StartupProfile[]> {
+    const where: string[] = [];
+    const params: unknown[] = [];
+
+    if (filters.city) {
+      params.push(`%${filters.city}%`);
+      const idx = params.length;
+      where.push(`address ILIKE $${idx}`);
+    }
+
+    if (filters.q) {
+      params.push(`%${filters.q}%`);
+      const idx = params.length;
+      where.push(`(name ILIKE $${idx} OR COALESCE(description, '') ILIKE $${idx} OR COALESCE(sector, '') ILIKE $${idx})`);
+    }
+
+    const limit = filters.limit ?? 500;
+    const offset = filters.offset ?? 0;
+    params.push(limit);
+    const limitIdx = params.length;
+    params.push(offset);
+    const offsetIdx = params.length;
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+
+    const result = await this.pool.query(
+      `
+      SELECT
+        id, name, website, employees, sector, year_founded, linkedin,
+        description, address, hiring_status, job_postings, photo_gallery,
+        lat, lng, created_at, updated_at
+      FROM startup_profiles
+      ${whereClause}
+      ORDER BY name ASC
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
+      `,
+      params
+    );
+
+    return result.rows.map(toStartupProfile);
   }
 
   async getById(id: string): Promise<StartupResource | null> {

@@ -26,11 +26,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${display.variable} ${body.variable} font-body`}>
+      <body className={`${display.variable} ${body.variable} font-body flex flex-col h-screen`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <TooltipProvider>
             <Header />
-            {children}
+            <div className="flex-1 min-h-0">{children}</div>
             <Toaster />
           </TooltipProvider>
         </ThemeProvider>

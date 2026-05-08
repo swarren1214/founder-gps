@@ -20,6 +20,25 @@ const startupResourceSchema = z.object({
   updatedAt: z.string()
 });
 
+const startupProfileSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  website: z.string().nullable(),
+  employees: z.string().nullable(),
+  sector: z.string().nullable(),
+  yearFounded: z.number().int().nullable(),
+  linkedin: z.string().nullable(),
+  description: z.string().nullable(),
+  address: z.string().nullable(),
+  hiringStatus: z.string().nullable(),
+  jobPostings: z.array(z.unknown()),
+  photoGallery: z.array(z.unknown()),
+  lat: z.number().nullable(),
+  lng: z.number().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
 export const founderIntakeSchema = z.object({
   founderProfileId: z.string().uuid(),
   locationCity: z.string().min(2),
@@ -131,6 +150,7 @@ export const founderFlowResponseSchema = z.object({
   route: founderRouteSchema.nullable(),
   roadmap: roadmapSchema.nullable(),
   resources: z.array(startupResourceSchema),
+  startups: z.array(startupProfileSchema).default([]),
   warnings: z.array(z.string())
 });
 
@@ -141,3 +161,4 @@ export type FounderRoute = z.infer<typeof founderRouteSchema>;
 export type Roadmap = z.infer<typeof roadmapSchema>;
 export type FounderFlowResponse = z.infer<typeof founderFlowResponseSchema>;
 export type ResourceCardData = z.infer<typeof startupResourceSchema>;
+export type StartupProfileData = z.infer<typeof startupProfileSchema>;

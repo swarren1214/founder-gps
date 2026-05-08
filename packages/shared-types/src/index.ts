@@ -44,6 +44,25 @@ export interface StartupResource {
   updatedAt: string;
 }
 
+export interface StartupProfile {
+  id: string;
+  name: string;
+  website: string | null;
+  employees: string | null;
+  sector: string | null;
+  yearFounded: number | null;
+  linkedin: string | null;
+  description: string | null;
+  address: string | null;
+  hiringStatus: string | null;
+  jobPostings: unknown[];
+  photoGallery: unknown[];
+  lat: number | null;
+  lng: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ResourceFeature {
   type: "Feature";
   geometry: {
@@ -94,4 +113,4 @@ export interface FounderRoute {
   geojson: RouteGeoJsonFeatureCollection;
 }
 
-export * from "./errors";
+export * from "./errors.js";

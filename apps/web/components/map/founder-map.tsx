@@ -5,13 +5,15 @@ import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer, PathLayer, ScatterplotLayer } from "@deck.gl/layers";
 import { cn } from "@/lib/utils";
-import type { FounderRoute, Recommendation, ResourceCardData } from "@/lib/schemas";
+import type { FounderRoute, Recommendation, ResourceCardData, StartupProfileData } from "@/lib/schemas";
 
 type FounderMapProps = {
   resources: ResourceCardData[];
+  startups: StartupProfileData[];
   recommendations: Recommendation[];
   route: FounderRoute | null;
   founderLocation: { lat: number; lng: number; city: string };
+  showPins: boolean;
   className?: string;
 };
 
@@ -20,7 +22,7 @@ type FounderMapProps = {
 const PIN_W = 80;
 const PIN_H = 94;
 const PIN_CIRCLE_CX = 40;
-const PIN_CIRCLE_CY = 32;
+const PIN_CIRCLE_CY = 42;
 const PIN_CIRCLE_R = 20;
 const PIN_ANCHOR_Y = 88;
 
@@ -107,6 +109,7 @@ async function buildPinIcon(logoUrl: string | null, isRecommended: boolean): Pro
 }
 
 type ResourcePin = ResourceCardData & { pinIconUrl: string };
+type StartupPin = { id: string; name: string; lat: number; lng: number; pinIconUrl: string };
 
 function getDomainFromUrl(url: string | null): string | null {
   if (!url) {
@@ -121,10 +124,9 @@ function getDomainFromUrl(url: string | null): string | null {
   }
 }
 
-export function FounderMap({ resources, recommendations, route, founderLocation, className }: FounderMapProps) {
+export function FounderMap({ resources, startups, recommendations, route, founderLocation, showPins, className }: FounderMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<maplibregl.Map | null>(null);
-  const [showPins, setShowPins] = useState(true);
 
   const recommendedIds = useMemo(
     () => new Set(recommendations.map((recommendation) => recommendation.resourceId)),
@@ -132,6 +134,35 @@ export function FounderMap({ resources, recommendations, route, founderLocation,
   );
 
   const [resourcePins, setResourcePins] = useState<ResourcePin[]>([]);
+  const [startupPinIconUrl, setStartupPinIconUrl] = useState<string | null>(null);
+
+  const startupPins = useMemo<StartupPin[]>(
+    () =>
+      startups
+        .filter((startup): startup is StartupProfileData & { lat: number; lng: number } => startup.lat !== null && startup.lng !== null)
+        .map((startup) => ({
+          id: startup.id,
+          name: startup.name,
+          lat: startup.lat,
+          lng: startup.lng,
+          pinIconUrl: startupPinIconUrl ?? ""
+        })),
+    [startups, startupPinIconUrl]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    buildPinIcon(null, true).then((url) => {
+      if (!cancelled) {
+        setStartupPinIconUrl(url);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,7 +219,7 @@ export function FounderMap({ resources, recommendations, route, founderLocation,
     const overlay = new MapboxOverlay({
       interleaved: true,
       getTooltip: ({ layer, object }) => {
-        if (layer?.id === "resources-pin-layer" && object && "name" in object) {
+        if ((layer?.id === "resources-pin-layer" || layer?.id === "startup-profiles-pin-layer") && object && "name" in object) {
           return {
             text: (object as ResourceCardData).name
           };
@@ -207,6 +238,26 @@ export function FounderMap({ resources, recommendations, route, founderLocation,
         }),
         ...(showPins
           ? [
+              ...(startupPinIconUrl
+                ? [
+                    new IconLayer<StartupPin>({
+                      id: "startup-profiles-pin-layer",
+                      data: startupPins,
+                      getPosition: (startup) => [startup.lng, startup.lat],
+                      getIcon: (startup) => ({
+                        url: startup.pinIconUrl,
+                        width: PIN_W * 2,
+                        height: PIN_H * 2,
+                        anchorX: PIN_W,
+                        anchorY: PIN_ANCHOR_Y * 2
+                      }),
+                      getSize: 54,
+                      sizeUnits: "pixels",
+                      sizeScale: 1,
+                      pickable: true
+                    })
+                  ]
+                : []),
               new IconLayer<ResourcePin>({
                 id: "resources-pin-layer",
                 data: resourcePins,
@@ -246,26 +297,20 @@ export function FounderMap({ resources, recommendations, route, founderLocation,
     resources,
     recommendations,
     route,
+    startups,
     founderLocation.city,
     founderLocation.lat,
     founderLocation.lng,
     recommendedIds,
     resourcePins,
+    startupPinIconUrl,
+    startupPins,
     showPins
   ]);
 
   return (
     <div className="relative h-full w-full">
-      <div ref={mapRef} className={cn("h-[420px] w-full overflow-hidden rounded-[28px]", className)} />
-      <button
-        type="button"
-        onClick={() => setShowPins((current) => !current)}
-        className="absolute left-5 top-5 z-40 inline-flex items-center rounded-full border border-slate-300/90 bg-white/95 px-4 py-2 text-sm font-semibold text-slate-900 shadow-md backdrop-blur transition hover:bg-white dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-900"
-        aria-pressed={showPins}
-        aria-label={showPins ? "Hide resource pins" : "Show resource pins"}
-      >
-        {showPins ? "Hide pins" : "Show pins"}
-      </button>
+      <div ref={mapRef} className={cn("h-full w-full overflow-hidden", className)} />
     </div>
   );
 }
