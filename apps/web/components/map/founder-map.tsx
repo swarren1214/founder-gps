@@ -441,8 +441,21 @@ export function FounderMap({
     };
   }, [founderLocation.lat, founderLocation.lng]);
 
-  useEffect(() => {
+  const selectedStartupCoords = useMemo(() => {
     if (!selectedStartupId) {
+      return null;
+    }
+
+    const found = startups.find(
+      (startup): startup is StartupProfileData & { lat: number; lng: number } =>
+        startup.id === selectedStartupId && startup.lat !== null && startup.lng !== null
+    );
+
+    return found ? { lat: found.lat, lng: found.lng } : null;
+  }, [selectedStartupId, startups]);
+
+  useEffect(() => {
+    if (!selectedStartupCoords) {
       return;
     }
 
@@ -451,23 +464,14 @@ export function FounderMap({
       return;
     }
 
-    const selectedStartup = startups.find(
-      (startup): startup is StartupProfileData & { lat: number; lng: number } =>
-        startup.id === selectedStartupId && startup.lat !== null && startup.lng !== null
-    );
-
-    if (!selectedStartup) {
-      return;
-    }
-
     map.flyTo({
-      center: [selectedStartup.lng, selectedStartup.lat],
+      center: [selectedStartupCoords.lng, selectedStartupCoords.lat],
       zoom: Math.max(map.getZoom(), 13.5),
       speed: 1.1,
       curve: 1.2,
       essential: true
     });
-  }, [selectedStartupId, startups]);
+  }, [selectedStartupCoords]);
 
   useEffect(() => {
     const map = instanceRef.current;
