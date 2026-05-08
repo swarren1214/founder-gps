@@ -8,6 +8,7 @@ type BrandfetchFormat = {
 };
 
 type BrandfetchLogo = {
+  type?: string;
   formats?: BrandfetchFormat[];
 };
 
@@ -75,20 +76,43 @@ async function getBrandfetchLogoSource(domain: string): Promise<string | null> {
   }
 
   const payload = (await response.json()) as BrandfetchResponse;
-  const sources = (payload.logos ?? [])
-    .flatMap((logo) => logo.formats ?? [])
-    .filter((format) => typeof format.src === "string" && format.src.length > 0)
+  const candidates = (payload.logos ?? [])
+    .flatMap((logo) =>
+      (logo.formats ?? []).map((format) => ({
+        logoType: logo.type ?? "",
+        format
+      }))
+    )
+    .filter((entry) => typeof entry.format.src === "string" && entry.format.src.length > 0)
     .sort((a, b) => {
-      // Prefer SVG (crisp at any canvas size), then PNG
-      const aRank = a.format === "svg" ? 0 : a.format === "png" ? 1 : 2;
-      const bRank = b.format === "svg" ? 0 : b.format === "png" ? 1 : 2;
-      if (aRank !== bRank) {
-        return aRank - bRank;
+      const aIsIcon = a.logoType.toLowerCase() === "icon" ? 0 : 1;
+      const bIsIcon = b.logoType.toLowerCase() === "icon" ? 0 : 1;
+      if (aIsIcon !== bIsIcon) {
+        return aIsIcon - bIsIcon;
       }
-      return (b.width ?? 0) - (a.width ?? 0);
+
+      const aRatio =
+        typeof a.format.width === "number" && typeof a.format.height === "number" && a.format.height > 0
+          ? Math.abs(1 - a.format.width / a.format.height)
+          : Number.POSITIVE_INFINITY;
+      const bRatio =
+        typeof b.format.width === "number" && typeof b.format.height === "number" && b.format.height > 0
+          ? Math.abs(1 - b.format.width / b.format.height)
+          : Number.POSITIVE_INFINITY;
+      if (aRatio !== bRatio) {
+        return aRatio - bRatio;
+      }
+
+      const aFormatRank = a.format.format === "svg" ? 0 : a.format.format === "png" ? 1 : 2;
+      const bFormatRank = b.format.format === "svg" ? 0 : b.format.format === "png" ? 1 : 2;
+      if (aFormatRank !== bFormatRank) {
+        return aFormatRank - bFormatRank;
+      }
+
+      return (b.format.width ?? 0) - (a.format.width ?? 0);
     });
 
-  return sources[0]?.src ?? null;
+  return candidates[0]?.format.src ?? null;
 }
 
 async function fetchBrandfetch(domain: string): Promise<Response | null> {
@@ -162,6 +186,7 @@ export async function GET(request: NextRequest) {
   const domainParam = request.nextUrl.searchParams.get("domain");
   const srcParam = request.nextUrl.searchParams.get("src");
   const sizeParam = request.nextUrl.searchParams.get("size");
+  const strictParam = request.nextUrl.searchParams.get("strict");
 
   if (!domainParam && !srcParam) {
     return NextResponse.json({ error: "domain or src query param is required" }, { status: 400 });
@@ -169,6 +194,7 @@ export async function GET(request: NextRequest) {
 
   const size = Number(sizeParam ?? "64");
   const clampedSize = Number.isFinite(size) ? Math.min(256, Math.max(32, Math.round(size))) : 64;
+  const strictMode = strictParam === "1" || strictParam?.toLowerCase() === "true";
 
   let domain: string | null = null;
   if (domainParam) {
@@ -200,6 +226,10 @@ export async function GET(request: NextRequest) {
       const brandfetch = await fetchBrandfetch(domain);
       if (brandfetch?.body) {
         return toImageResponse(brandfetch);
+      }
+
+      if (strictMode) {
+        return NextResponse.json({ error: "logo not found" }, { status: 404 });
       }
 
       const logoDev = await fetchLogoDev(domain, clampedSize);

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import { IconLayer, PathLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { cn } from "@/lib/utils";
 import type { FounderRoute, Recommendation, ResourceCardData, StartupProfileData } from "@/lib/schemas";
 
@@ -14,6 +14,7 @@ type FounderMapProps = {
   route: FounderRoute | null;
   founderLocation: { lat: number; lng: number; city: string };
   showPins: boolean;
+  selectedStartupId?: string | null;
   className?: string;
 };
 
@@ -133,13 +134,12 @@ async function buildPinIcon(logoUrl: string | null, isRecommended: boolean, labe
   if (!ctx) {
     // Fallback: plain SVG data URL (no logo)
     const fill = isRecommended ? "#0f6a74" : "#11203b";
-    const stroke = isRecommended ? "#43A79D" : "#009C8D";
     const badge = getFallbackColor(label);
     const initial = getFallbackInitial(label);
     return (
       "data:image/svg+xml;charset=utf-8," +
       encodeURIComponent(
-        `<svg xmlns='http://www.w3.org/2000/svg' width='${PIN_W}' height='${PIN_H}' viewBox='0 0 ${PIN_W} ${PIN_H}'><path d='${PIN_PATH}' fill='${fill}'/><circle cx='${PIN_CIRCLE_CX}' cy='${PIN_CIRCLE_CY}' r='${PIN_CIRCLE_R}' fill='${badge}' stroke='${stroke}' stroke-width='1'/><text x='${PIN_CIRCLE_CX}' y='${PIN_CIRCLE_CY + 1}' text-anchor='middle' dominant-baseline='middle' fill='#fff' font-family='system-ui, -apple-system, Segoe UI, sans-serif' font-size='14' font-weight='700'>${initial}</text></svg>`
+        `<svg xmlns='http://www.w3.org/2000/svg' width='${PIN_W}' height='${PIN_H}' viewBox='0 0 ${PIN_W} ${PIN_H}'><path d='${PIN_PATH}' fill='${fill}'/><circle cx='${PIN_CIRCLE_CX}' cy='${PIN_CIRCLE_CY}' r='${PIN_CIRCLE_R}' fill='${badge}'/><text x='${PIN_CIRCLE_CX}' y='${PIN_CIRCLE_CY + 1}' text-anchor='middle' dominant-baseline='middle' fill='#fff' font-family='system-ui, -apple-system, Segoe UI, sans-serif' font-size='14' font-weight='700'>${initial}</text></svg>`
       )
     );
   }
@@ -147,8 +147,6 @@ async function buildPinIcon(logoUrl: string | null, isRecommended: boolean, labe
   ctx.scale(scale, scale);
 
   const pinColor = isRecommended ? "#0f6a74" : "#11203b";
-  const strokeColor = isRecommended ? "#43A79D" : "#009C8D";
-
   // Pin body
   ctx.fillStyle = pinColor;
   ctx.fill(new Path2D(PIN_PATH));
@@ -201,18 +199,23 @@ async function buildPinIcon(logoUrl: string | null, isRecommended: boolean, labe
     drawFallbackBadge(ctx, label);
   }
 
-  // Stroke ring drawn on top of logo
-  ctx.beginPath();
-  ctx.arc(PIN_CIRCLE_CX, PIN_CIRCLE_CY, PIN_CIRCLE_R, 0, Math.PI * 2);
-  ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
   return canvas.toDataURL("image/png");
 }
 
 type ResourcePin = ResourceCardData & { pinIconUrl: string };
 type StartupPin = { id: string; name: string; lat: number; lng: number; pinIconUrl: string };
+type MapPin = { id: string; name: string; lat: number; lng: number; pinIconUrl: string; size: number };
+type PinCluster = {
+  id: string;
+  lat: number;
+  lng: number;
+  count: number;
+  points: MapPin[];
+  minLat: number;
+  minLng: number;
+  maxLat: number;
+  maxLng: number;
+};
 
 function getDomainFromUrl(url: string | null): string | null {
   if (!url) {
@@ -227,7 +230,91 @@ function getDomainFromUrl(url: string | null): string | null {
   }
 }
 
-export function FounderMap({ resources, startups, recommendations, route, founderLocation, showPins, className }: FounderMapProps) {
+function clusterPins(points: MapPin[], map: maplibregl.Map, radiusPx = 52): { clusters: PinCluster[]; singles: MapPin[] } {
+  if (points.length <= 1) {
+    return { clusters: [], singles: points };
+  }
+
+  const projected = points.map((point) => ({
+    point,
+    projected: map.project([point.lng, point.lat])
+  }));
+
+  const visited = new Array(projected.length).fill(false);
+  const clusters: PinCluster[] = [];
+  const singles: MapPin[] = [];
+
+  for (let index = 0; index < projected.length; index += 1) {
+    if (visited[index]) {
+      continue;
+    }
+
+    visited[index] = true;
+    const queue = [index];
+    const memberIndexes: number[] = [index];
+
+    while (queue.length > 0) {
+      const currentIndex = queue.pop() as number;
+      const current = projected[currentIndex];
+
+      for (let compareIndex = 0; compareIndex < projected.length; compareIndex += 1) {
+        if (visited[compareIndex]) {
+          continue;
+        }
+
+        const candidate = projected[compareIndex];
+        const dx = current.projected.x - candidate.projected.x;
+        const dy = current.projected.y - candidate.projected.y;
+        const distance = Math.hypot(dx, dy);
+
+        if (distance <= radiusPx) {
+          visited[compareIndex] = true;
+          queue.push(compareIndex);
+          memberIndexes.push(compareIndex);
+        }
+      }
+    }
+
+    if (memberIndexes.length === 1) {
+      singles.push(projected[index].point);
+      continue;
+    }
+
+    const members = memberIndexes.map((memberIndex) => projected[memberIndex].point);
+
+    const lng = members.reduce((sum, member) => sum + member.lng, 0) / members.length;
+    const lat = members.reduce((sum, member) => sum + member.lat, 0) / members.length;
+    const minLng = Math.min(...members.map((member) => member.lng));
+    const maxLng = Math.max(...members.map((member) => member.lng));
+    const minLat = Math.min(...members.map((member) => member.lat));
+    const maxLat = Math.max(...members.map((member) => member.lat));
+
+    clusters.push({
+      id: `cluster-${memberIndexes.sort((a, b) => a - b).join("-")}`,
+      lat,
+      lng,
+      count: members.length,
+      points: members,
+      minLat,
+      minLng,
+      maxLat,
+      maxLng
+    });
+  }
+
+  return { clusters, singles };
+}
+
+export function FounderMap({
+  resources,
+  startups,
+  recommendations,
+  route,
+  founderLocation,
+  showPins,
+  selectedStartupId = null,
+  className
+}: FounderMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<maplibregl.Map | null>(null);
 
@@ -238,6 +325,34 @@ export function FounderMap({ resources, startups, recommendations, route, founde
 
   const [resourcePins, setResourcePins] = useState<ResourcePin[]>([]);
   const [startupPins, setStartupPins] = useState<StartupPin[]>([]);
+  const [mapRevision, setMapRevision] = useState(0);
+
+  const allPins = useMemo<MapPin[]>(
+    () => [
+      ...startupPins.map((pin) => ({
+        ...pin,
+        size: pin.id === selectedStartupId ? 72 : 56
+      })),
+      ...resourcePins.map((pin) => ({
+        id: pin.id,
+        name: pin.name,
+        lat: pin.lat,
+        lng: pin.lng,
+        pinIconUrl: pin.pinIconUrl,
+        size: recommendedIds.has(pin.id) ? 72 : 64
+      }))
+    ],
+    [resourcePins, startupPins, recommendedIds, selectedStartupId]
+  );
+
+  const clusteredPins = useMemo(() => {
+    const map = instanceRef.current;
+    if (!map || allPins.length === 0) {
+      return { clusters: [] as PinCluster[], singles: allPins };
+    }
+
+    return clusterPins(allPins, map);
+  }, [allPins, mapRevision]);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,9 +363,9 @@ export function FounderMap({ resources, startups, recommendations, route, founde
         .map(async (startup) => {
           const domain = getDomainFromUrl(startup.website);
           const proxiedLogoUrl = startup.logoUrl
-            ? `/api/logo?src=${encodeURIComponent(startup.logoUrl)}&size=64`
+            ? `/api/logo?src=${encodeURIComponent(startup.logoUrl)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}&size=64&strict=1`
             : domain
-              ? `/api/logo?domain=${encodeURIComponent(domain)}&size=64`
+              ? `/api/logo?domain=${encodeURIComponent(domain)}&size=64&strict=1`
               : null;
           const pinIconUrl = await buildPinIcon(proxiedLogoUrl, true, startup.name);
           return {
@@ -279,9 +394,9 @@ export function FounderMap({ resources, startups, recommendations, route, founde
       resources.map(async (resource) => {
         const domain = getDomainFromUrl(resource.website);
         const logoUrl = resource.logoUrl
-          ? `/api/logo?src=${encodeURIComponent(resource.logoUrl)}&size=64`
+          ? `/api/logo?src=${encodeURIComponent(resource.logoUrl)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}&size=64&strict=1`
           : domain
-            ? `/api/logo?domain=${encodeURIComponent(domain)}&size=64`
+            ? `/api/logo?domain=${encodeURIComponent(domain)}&size=64&strict=1`
             : null;
         const isRecommended = recommendedIds.has(resource.id);
         const pinIconUrl = await buildPinIcon(logoUrl, isRecommended, resource.name);
@@ -310,6 +425,14 @@ export function FounderMap({ resources, startups, recommendations, route, founde
 
     instanceRef.current = map;
 
+    map.on("load", () => {
+      setMapRevision((value) => value + 1);
+    });
+
+    map.on("moveend", () => {
+      setMapRevision((value) => value + 1);
+    });
+
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
     return () => {
@@ -317,6 +440,34 @@ export function FounderMap({ resources, startups, recommendations, route, founde
       instanceRef.current = null;
     };
   }, [founderLocation.lat, founderLocation.lng]);
+
+  useEffect(() => {
+    if (!selectedStartupId) {
+      return;
+    }
+
+    const map = instanceRef.current;
+    if (!map) {
+      return;
+    }
+
+    const selectedStartup = startups.find(
+      (startup): startup is StartupProfileData & { lat: number; lng: number } =>
+        startup.id === selectedStartupId && startup.lat !== null && startup.lng !== null
+    );
+
+    if (!selectedStartup) {
+      return;
+    }
+
+    map.flyTo({
+      center: [selectedStartup.lng, selectedStartup.lat],
+      zoom: Math.max(map.getZoom(), 13.5),
+      speed: 1.1,
+      curve: 1.2,
+      essential: true
+    });
+  }, [selectedStartupId, startups]);
 
   useEffect(() => {
     const map = instanceRef.current;
@@ -329,9 +480,20 @@ export function FounderMap({ resources, startups, recommendations, route, founde
     const overlay = new MapboxOverlay({
       interleaved: true,
       getTooltip: ({ layer, object }) => {
-        if ((layer?.id === "resources-pin-layer" || layer?.id === "startup-profiles-pin-layer") && object && "name" in object) {
+        if (layer?.id === "pin-cluster-layer" && object && "count" in object) {
+          const cluster = object as PinCluster;
           return {
-            text: (object as ResourceCardData).name
+            text: `${cluster.count} startups/resources`
+          };
+        }
+
+        if (layer?.id === "pin-cluster-count-layer") {
+          return null;
+        }
+
+        if (layer?.id === "all-pins-layer" && object && "name" in object) {
+          return {
+            text: (object as MapPin).name
           };
         }
 
@@ -348,39 +510,71 @@ export function FounderMap({ resources, startups, recommendations, route, founde
         }),
         ...(showPins
           ? [
-              ...(startupPins.length > 0
+              ...(clusteredPins.clusters.length > 0
                 ? [
-                    new IconLayer<StartupPin>({
-                      id: "startup-profiles-pin-layer",
-                      data: startupPins,
-                      getPosition: (startup) => [startup.lng, startup.lat],
-                      getIcon: (startup) => ({
-                        url: startup.pinIconUrl,
-                        width: PIN_W * 2,
-                        height: PIN_H * 2,
-                        anchorX: PIN_W,
-                        anchorY: PIN_ANCHOR_Y * 2
-                      }),
-                      getSize: 54,
+                    new ScatterplotLayer<PinCluster>({
+                      id: "pin-cluster-layer",
+                      data: clusteredPins.clusters,
+                      getPosition: (cluster) => [cluster.lng, cluster.lat],
+                      getRadius: (cluster) => Math.min(40, 18 + cluster.count * 1.6),
+                      radiusUnits: "pixels",
+                      getFillColor: [17, 32, 59, 230],
+                      getLineColor: [67, 167, 157, 255],
+                      lineWidthUnits: "pixels",
+                      lineWidthMinPixels: 2,
+                      stroked: true,
+                      pickable: true,
+                      onClick: ({ object }) => {
+                        if (!object) {
+                          return;
+                        }
+
+                        const mapInstance = instanceRef.current;
+                        if (!mapInstance) {
+                          return;
+                        }
+
+                        const cluster = object as PinCluster;
+                        mapInstance.fitBounds(
+                          [
+                            [cluster.minLng, cluster.minLat],
+                            [cluster.maxLng, cluster.maxLat]
+                          ],
+                          {
+                            padding: 90,
+                            maxZoom: 14,
+                            duration: 350
+                          }
+                        );
+                      }
+                    }),
+                    new TextLayer<PinCluster>({
+                      id: "pin-cluster-count-layer",
+                      data: clusteredPins.clusters,
+                      getPosition: (cluster) => [cluster.lng, cluster.lat],
+                      getText: (cluster) => String(cluster.count),
+                      getSize: 14,
                       sizeUnits: "pixels",
-                      sizeScale: 1,
-                      pickable: true
+                      getColor: [255, 255, 255, 255],
+                      getTextAnchor: "middle",
+                      getAlignmentBaseline: "center",
+                      pickable: false
                     })
                   ]
                 : []),
-              new IconLayer<ResourcePin>({
-                id: "resources-pin-layer",
-                data: resourcePins,
-                getPosition: (resource) => [resource.lng, resource.lat],
-                getIcon: (resource) => ({
-                  url: resource.pinIconUrl,
+              new IconLayer<MapPin>({
+                id: "all-pins-layer",
+                data: clusteredPins.singles,
+                getPosition: (pin) => [pin.lng, pin.lat],
+                getIcon: (pin) => ({
+                  url: pin.pinIconUrl,
                   // Canvas is drawn at 2x (retina): PIN_W*2 × PIN_H*2
                   width: PIN_W * 2,
                   height: PIN_H * 2,
                   anchorX: PIN_W, // center x = 40*2
                   anchorY: PIN_ANCHOR_Y * 2 // pin tip = 88*2
                 }),
-                getSize: (resource) => (recommendedIds.has(resource.id) ? 72 : 64),
+                getSize: (pin) => pin.size,
                 sizeUnits: "pixels",
                 sizeScale: 1,
                 pickable: true
@@ -411,9 +605,7 @@ export function FounderMap({ resources, startups, recommendations, route, founde
     founderLocation.city,
     founderLocation.lat,
     founderLocation.lng,
-    recommendedIds,
-    resourcePins,
-    startupPins,
+    clusteredPins,
     showPins
   ]);
 

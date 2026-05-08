@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { FounderFlowResponse } from "@/lib/schemas";
+import { cn } from "@/lib/utils";
 
 type DashboardControlsProps = {
   run: FounderFlowResponse;
@@ -14,6 +15,8 @@ type DashboardControlsProps = {
   onRetry: () => void;
   showPins: boolean;
   onTogglePins: () => void;
+  selectedStartupId?: string | null;
+  onStartupSelect?: (startupId: string) => void;
 };
 
 const STARTUP_AVATAR_COLORS = [
@@ -42,7 +45,16 @@ function getStartupInitial(name: string): string {
   return trimmed.length > 0 ? trimmed[0].toUpperCase() : "?";
 }
 
-export function DashboardControls({ run, isRetrying, retryError, onRetry, showPins, onTogglePins }: DashboardControlsProps) {
+export function DashboardControls({
+  run,
+  isRetrying,
+  retryError,
+  onRetry,
+  showPins,
+  onTogglePins,
+  selectedStartupId = null,
+  onStartupSelect
+}: DashboardControlsProps) {
   const { founderProfile, analysis, recommendations, route, roadmap, startups, warnings } = run;
 
   return (
@@ -175,7 +187,17 @@ export function DashboardControls({ run, isRetrying, retryError, onRetry, showPi
               {startups.length > 0 ? (
                 <div className="space-y-2">
                   {startups.map((startup) => (
-                    <div key={startup.id} className="rounded-2xl border border-border/70 bg-muted/35 px-3 py-2.5">
+                    <button
+                      key={startup.id}
+                      type="button"
+                      onClick={() => onStartupSelect?.(startup.id)}
+                      className={cn(
+                        "w-full rounded-2xl border px-3 py-2.5 text-left transition-colors",
+                        selectedStartupId === startup.id
+                          ? "border-primary/60 bg-primary/12 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.18)]"
+                          : "border-border/70 bg-muted/35 hover:border-primary/30 hover:bg-muted/55"
+                      )}
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2.5">
                           <div className="relative h-8 w-8 shrink-0">
@@ -211,7 +233,7 @@ export function DashboardControls({ run, isRetrying, retryError, onRetry, showPi
                             {startup.employees}</Badge>
                         ) : null}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               ) : (

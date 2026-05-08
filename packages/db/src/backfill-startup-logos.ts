@@ -4,9 +4,11 @@ type BrandfetchFormat = {
   src: string;
   format?: string;
   width?: number;
+  height?: number;
 };
 
 type BrandfetchLogo = {
+  type?: string;
   formats?: BrandfetchFormat[];
 };
 
@@ -43,19 +45,43 @@ async function getBrandfetchLogoSource(domain: string, apiKey: string): Promise<
   }
 
   const payload = (await response.json()) as BrandfetchResponse;
-  const sources = (payload.logos ?? [])
-    .flatMap((logo) => logo.formats ?? [])
-    .filter((format) => typeof format.src === "string" && format.src.length > 0)
+  const candidates = (payload.logos ?? [])
+    .flatMap((logo) =>
+      (logo.formats ?? []).map((format) => ({
+        logoType: logo.type ?? "",
+        format
+      }))
+    )
+    .filter((entry) => typeof entry.format.src === "string" && entry.format.src.length > 0)
     .sort((a, b) => {
-      const aRank = a.format === "svg" ? 0 : a.format === "png" ? 1 : 2;
-      const bRank = b.format === "svg" ? 0 : b.format === "png" ? 1 : 2;
-      if (aRank !== bRank) {
-        return aRank - bRank;
+      const aIsIcon = a.logoType.toLowerCase() === "icon" ? 0 : 1;
+      const bIsIcon = b.logoType.toLowerCase() === "icon" ? 0 : 1;
+      if (aIsIcon !== bIsIcon) {
+        return aIsIcon - bIsIcon;
       }
-      return (b.width ?? 0) - (a.width ?? 0);
+
+      const aRatio =
+        typeof a.format.width === "number" && typeof a.format.height === "number" && a.format.height > 0
+          ? Math.abs(1 - a.format.width / a.format.height)
+          : Number.POSITIVE_INFINITY;
+      const bRatio =
+        typeof b.format.width === "number" && typeof b.format.height === "number" && b.format.height > 0
+          ? Math.abs(1 - b.format.width / b.format.height)
+          : Number.POSITIVE_INFINITY;
+      if (aRatio !== bRatio) {
+        return aRatio - bRatio;
+      }
+
+      const aFormatRank = a.format.format === "svg" ? 0 : a.format.format === "png" ? 1 : 2;
+      const bFormatRank = b.format.format === "svg" ? 0 : b.format.format === "png" ? 1 : 2;
+      if (aFormatRank !== bFormatRank) {
+        return aFormatRank - bFormatRank;
+      }
+
+      return (b.format.width ?? 0) - (a.format.width ?? 0);
     });
 
-  return sources[0]?.src ?? null;
+  return candidates[0]?.format.src ?? null;
 }
 
 async function run() {
@@ -69,13 +95,13 @@ async function run() {
     id: string;
     name: string;
     website: string | null;
+    logo_url: string | null;
   }>(
     `
-    SELECT id, name, website
+    SELECT id, name, website, logo_url
     FROM startup_profiles
     WHERE website IS NOT NULL
       AND btrim(website) <> ''
-      AND (logo_url IS NULL OR btrim(logo_url) = '')
     ORDER BY name ASC
     `
   );
@@ -95,6 +121,12 @@ async function run() {
       const logoSource = await getBrandfetchLogoSource(domain, apiKey);
 
       if (!logoSource) {
+        skipped += 1;
+        continue;
+      }
+
+      const existingLogo = row.logo_url?.trim() ?? "";
+      if (existingLogo && existingLogo === logoSource) {
         skipped += 1;
         continue;
       }
