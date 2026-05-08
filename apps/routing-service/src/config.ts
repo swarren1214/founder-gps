@@ -1,5 +1,14 @@
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
+
+const serviceDir = path.dirname(fileURLToPath(import.meta.url));
+const rootEnvPath = path.resolve(serviceDir, "../../../.env");
+const rootEnvResult = loadEnv({ path: rootEnvPath });
+if (rootEnvResult.error) {
+  loadEnv();
+}
 
 const envSchema = z.object({
   ROUTING_SERVICE_PORT: z.coerce.number().default(4002),
