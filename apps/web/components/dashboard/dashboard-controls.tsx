@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Building2, Compass, MapPin, RefreshCw, Route, Sparkles } from "lucide-react";
+import { AlertTriangle, Building2, Compass, MapPin, RefreshCw, Route, Sparkles, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,32 @@ type DashboardControlsProps = {
   showPins: boolean;
   onTogglePins: () => void;
 };
+
+const STARTUP_AVATAR_COLORS = [
+  "#124e66",
+  "#0f766e",
+  "#1f6f8b",
+  "#1b4332",
+  "#264653",
+  "#2a4365",
+  "#155e75",
+  "#065f46"
+];
+
+function getStartupAvatarColor(name: string): string {
+  let hash = 0;
+  for (let index = 0; index < name.length; index += 1) {
+    hash = (hash << 5) - hash + name.charCodeAt(index);
+    hash |= 0;
+  }
+
+  return STARTUP_AVATAR_COLORS[Math.abs(hash) % STARTUP_AVATAR_COLORS.length];
+}
+
+function getStartupInitial(name: string): string {
+  const trimmed = name.trim();
+  return trimmed.length > 0 ? trimmed[0].toUpperCase() : "?";
+}
 
 export function DashboardControls({ run, isRetrying, retryError, onRetry, showPins, onTogglePins }: DashboardControlsProps) {
   const { founderProfile, analysis, recommendations, route, roadmap, startups, warnings } = run;
@@ -78,7 +104,7 @@ export function DashboardControls({ run, isRetrying, retryError, onRetry, showPi
               <div className="space-y-3">
                 {recommendations.map((recommendation, index) => (
                   <div key={recommendation.id} className="rounded-2xl border border-border/70 bg-muted/35 p-3">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Rank {index + 1}</p>
                         <p className="mt-1 font-semibold">{recommendation.resourceName}</p>
@@ -150,31 +176,39 @@ export function DashboardControls({ run, isRetrying, retryError, onRetry, showPi
                 <div className="space-y-2">
                   {startups.map((startup) => (
                     <div key={startup.id} className="rounded-2xl border border-border/70 bg-muted/35 px-3 py-2.5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">{startup.name}</p>
-                          <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                            {startup.sector ?? "Uncategorized"}
-                          </p>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="relative h-8 w-8 shrink-0">
+                            <div
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold text-white"
+                              style={{ backgroundColor: getStartupAvatarColor(startup.name) }}
+                              aria-hidden="true"
+                            >
+                              {getStartupInitial(startup.name)}
+                            </div>
+                            {startup.logoUrl ? (
+                              <img
+                                src={startup.logoUrl}
+                                alt={`${startup.name} logo`}
+                                className="absolute inset-0 h-8 w-8 rounded-md bg-background/70 object-contain p-1"
+                                loading="lazy"
+                                onError={(event) => {
+                                  event.currentTarget.style.display = "none";
+                                }}
+                              />
+                            ) : null}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">{startup.name}</p>
+                            <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                              {startup.sector ?? "Uncategorized"}
+                            </p>
+                          </div>
                         </div>
                         {startup.employees ? (
-                          <Badge className="bg-secondary/15 text-secondary">{startup.employees}</Badge>
-                        ) : null}
-                      </div>
-                      {startup.description ? (
-                        <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{startup.description}</p>
-                      ) : null}
-                      <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                        {startup.address ? <span>{startup.address}</span> : null}
-                        {startup.website ? (
-                          <a
-                            className="underline decoration-dotted underline-offset-2"
-                            href={startup.website.startsWith("http") ? startup.website : `https://${startup.website}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Website
-                          </a>
+                          <Badge className="bg-secondary/15 text-secondary">
+                            <Users className="mr-1 h-3 w-3" />
+                            {startup.employees}</Badge>
                         ) : null}
                       </div>
                     </div>

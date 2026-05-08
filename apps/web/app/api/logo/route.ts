@@ -22,6 +22,15 @@ function normalizeDomain(input: string): string {
   return parsed.hostname.replace(/^www\./, "").toLowerCase();
 }
 
+function normalizeSourceUrl(input: string): string {
+  const trimmed = input.trim();
+  const parsed = new URL(trimmed);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error("invalid protocol");
+  }
+  return parsed.toString();
+}
+
 function logoDevUrl(domain: string, size: number): string {
   const token = process.env.LOGO_DEV_API_KEY || process.env.LOGO_DEV_PUBLISHABLE_KEY || "";
   const url = new URL(`https://img.logo.dev/${domain}`);
@@ -101,6 +110,20 @@ async function fetchBrandfetch(domain: string): Promise<Response | null> {
   return response;
 }
 
+async function fetchDirectSource(sourceUrl: string): Promise<Response | null> {
+  const response = await fetch(sourceUrl, {
+    headers: { Accept: "image/*" },
+    cache: "no-store"
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!response.ok || !contentType.startsWith("image/")) {
+    return null;
+  }
+
+  return response;
+}
+
 async function fetchFaviconFallback(domain: string, size: number): Promise<Response | null> {
   const candidates = [
     `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`,
@@ -137,36 +160,57 @@ function toImageResponse(sourceResponse: Response): NextResponse {
 
 export async function GET(request: NextRequest) {
   const domainParam = request.nextUrl.searchParams.get("domain");
+  const srcParam = request.nextUrl.searchParams.get("src");
   const sizeParam = request.nextUrl.searchParams.get("size");
 
-  if (!domainParam) {
-    return NextResponse.json({ error: "domain query param is required" }, { status: 400 });
+  if (!domainParam && !srcParam) {
+    return NextResponse.json({ error: "domain or src query param is required" }, { status: 400 });
   }
 
   const size = Number(sizeParam ?? "64");
   const clampedSize = Number.isFinite(size) ? Math.min(256, Math.max(32, Math.round(size))) : 64;
 
-  let domain: string;
-  try {
-    domain = normalizeDomain(domainParam);
-  } catch {
-    return NextResponse.json({ error: "invalid domain" }, { status: 400 });
+  let domain: string | null = null;
+  if (domainParam) {
+    try {
+      domain = normalizeDomain(domainParam);
+    } catch {
+      return NextResponse.json({ error: "invalid domain" }, { status: 400 });
+    }
+  }
+
+  let sourceUrl: string | null = null;
+  if (srcParam) {
+    try {
+      sourceUrl = normalizeSourceUrl(srcParam);
+    } catch {
+      return NextResponse.json({ error: "invalid src" }, { status: 400 });
+    }
   }
 
   try {
-    const brandfetch = await fetchBrandfetch(domain);
-    if (brandfetch?.body) {
-      return toImageResponse(brandfetch);
+    if (sourceUrl) {
+      const directSource = await fetchDirectSource(sourceUrl);
+      if (directSource?.body) {
+        return toImageResponse(directSource);
+      }
     }
 
-    const logoDev = await fetchLogoDev(domain, clampedSize);
-    if (logoDev?.body) {
-      return toImageResponse(logoDev);
-    }
+    if (domain) {
+      const brandfetch = await fetchBrandfetch(domain);
+      if (brandfetch?.body) {
+        return toImageResponse(brandfetch);
+      }
 
-    const fallback = await fetchFaviconFallback(domain, clampedSize);
-    if (fallback?.body) {
-      return toImageResponse(fallback);
+      const logoDev = await fetchLogoDev(domain, clampedSize);
+      if (logoDev?.body) {
+        return toImageResponse(logoDev);
+      }
+
+      const fallback = await fetchFaviconFallback(domain, clampedSize);
+      if (fallback?.body) {
+        return toImageResponse(fallback);
+      }
     }
 
     return NextResponse.json({ error: "logo not found" }, { status: 404 });

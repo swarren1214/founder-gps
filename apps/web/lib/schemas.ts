@@ -24,6 +24,7 @@ const startupProfileSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   website: z.string().nullable(),
+  logoUrl: z.string().nullable(),
   employees: z.string().nullable(),
   sector: z.string().nullable(),
   yearFounded: z.number().int().nullable(),

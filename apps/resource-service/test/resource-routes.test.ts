@@ -68,6 +68,7 @@ class InMemoryResourceRepository implements ResourceRepository {
         id: "33333333-3333-4333-8333-333333333333",
         name: "Demo Startup",
         website: "https://demo-startup.com",
+        logoUrl: "https://cdn.example.com/demo-logo.png",
         employees: "11-50",
         sector: "B2B Software",
         yearFounded: null,

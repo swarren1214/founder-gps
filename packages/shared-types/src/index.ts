@@ -48,6 +48,7 @@ export interface StartupProfile {
   id: string;
   name: string;
   website: string | null;
+  logoUrl: string | null;
   employees: string | null;
   sector: string | null;
   yearFounded: number | null;

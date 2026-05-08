@@ -41,6 +41,7 @@ function toStartupProfile(row: QueryResultRow): StartupProfile {
     id: row.id,
     name: row.name,
     website: row.website,
+    logoUrl: row.logo_url,
     employees: row.employees,
     sector: row.sector,
     yearFounded: row.year_founded,
@@ -164,7 +165,7 @@ export class PgResourceRepository implements ResourceRepository {
     const result = await this.pool.query(
       `
       SELECT
-        id, name, website, employees, sector, year_founded, linkedin,
+        id, name, website, logo_url, employees, sector, year_founded, linkedin,
         description, address, hiring_status, job_postings, photo_gallery,
         lat, lng, created_at, updated_at
       FROM startup_profiles
