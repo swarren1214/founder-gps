@@ -44,6 +44,7 @@ export function FounderIntakeForm() {
   const [isPending, startTransition] = useTransition();
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState<FounderIntake>(defaultValue);
+  const [selectedPresetLabel, setSelectedPresetLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const step = steps[stepIndex];
@@ -57,8 +58,17 @@ export function FounderIntakeForm() {
 
   function applyPreset(index: number) {
     const preset = founderPresets[index];
-    setForm(preset.value);
+    setForm({
+      ...preset.value,
+      founderProfileId: crypto.randomUUID()
+    });
+    setSelectedPresetLabel(preset.label);
+    setStepIndex(0);
     setError(null);
+    queueMicrotask(() => {
+      const target = document.getElementById("locationCity") as HTMLInputElement | null;
+      target?.focus();
+    });
     trackEvent("preset_selected", { preset: preset.label });
   }
 
@@ -140,7 +150,12 @@ export function FounderIntakeForm() {
               <button
                 key={preset.label}
                 type="button"
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:bg-white/10"
+                aria-pressed={selectedPresetLabel === preset.label}
+                className={`w-full cursor-pointer rounded-2xl border px-4 py-3 text-left transition ${
+                  selectedPresetLabel === preset.label
+                    ? "border-white/35 bg-white/15"
+                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                }`}
                 onClick={() => applyPreset(index)}
               >
                 <p className="font-medium">{preset.label}</p>
@@ -148,10 +163,13 @@ export function FounderIntakeForm() {
               </button>
             ))}
           </div>
+          {selectedPresetLabel ? (
+            <p className="mt-3 text-xs font-medium text-white/80">Applied preset: {selectedPresetLabel}</p>
+          ) : null}
         </div>
       </Card>
 
-      <Card className="bg-white/82">
+      <Card className="bg-card/90">
         <div className="mb-8 flex items-center justify-between gap-4">
           <div>
             <Badge>{step.title}</Badge>
@@ -161,12 +179,12 @@ export function FounderIntakeForm() {
             </CardDescription>
           </div>
           <div className="min-w-[120px] text-right">
-            <p className="text-xs uppercase tracking-[0.18em] text-ink/45">Progress</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Progress</p>
             <p className="font-display text-3xl">{Math.round(progress)}%</p>
           </div>
         </div>
 
-        <div className="mb-8 h-3 overflow-hidden rounded-full bg-mist">
+        <div className="mb-8 h-3 overflow-hidden rounded-full bg-muted">
           <motion.div
             animate={{ width: `${progress}%` }}
             className="h-full rounded-full bg-[linear-gradient(90deg,#0f6a74,#ff7a1a)]"
@@ -176,10 +194,10 @@ export function FounderIntakeForm() {
 
         <motion.div
           key={step.title}
-          initial={{ opacity: 0, y: 18 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28 }}
-          className="grid gap-5 md:grid-cols-2"
+          className="grid gap-5 text-foreground md:grid-cols-2"
         >
           {stepIndex === 0 ? (
             <>
@@ -197,7 +215,7 @@ export function FounderIntakeForm() {
               </div>
               <div>
                 <Label htmlFor="stage">Stage</Label>
-                <select id="stage" className="h-12 w-full rounded-2xl border border-ink/10 bg-white px-4 text-sm" value={form.stage} onChange={(event) => updateField("stage", event.target.value as FounderIntake["stage"])}>
+                <select id="stage" className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/25" value={form.stage} onChange={(event) => updateField("stage", event.target.value as FounderIntake["stage"])}>
                   {stageOptions.map((option) => (
                     <option key={option} value={option}>{option}</option>
                   ))}
@@ -237,7 +255,7 @@ export function FounderIntakeForm() {
             <>
               <div>
                 <Label htmlFor="category">Priority resource category</Label>
-                <select id="category" className="h-12 w-full rounded-2xl border border-ink/10 bg-white px-4 text-sm" value={form.category} onChange={(event) => updateField("category", event.target.value as FounderIntake["category"])}>
+                <select id="category" className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/25" value={form.category} onChange={(event) => updateField("category", event.target.value as FounderIntake["category"])}>
                   {categoryOptions.map((option) => (
                     <option key={option} value={option}>{option}</option>
                   ))}
@@ -255,7 +273,7 @@ export function FounderIntakeForm() {
           ) : null}
         </motion.div>
 
-        {error ? <p className="mt-6 text-sm font-medium text-[#b33f00]">{error}</p> : null}
+        {error ? <p className="mt-6 text-sm font-medium text-destructive">{error}</p> : null}
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
           <Button variant="ghost" onClick={previousStep} disabled={stepIndex === 0 || isPending}>

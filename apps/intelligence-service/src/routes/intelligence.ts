@@ -53,7 +53,7 @@ export async function intelligenceRoutes(
       return sendApiError(
         reply,
         "DEPENDENCY_UNAVAILABLE",
-        "AI provider unavailable. Returning fallback analysis is not possible for this request."
+        "Intelligence dependency unavailable. Analysis generation or snapshot persistence failed."
       );
     }
   });

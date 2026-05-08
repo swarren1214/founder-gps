@@ -17,7 +17,21 @@ function generateRequestId(): string {
 async function parseJson(response: Response) {
   const payload = await response.json();
   if (!response.ok) {
-    throw new Error(payload.error ?? `Request failed with ${response.status}`);
+    const maybeError = payload?.error;
+    if (typeof maybeError === "string") {
+      throw new Error(maybeError);
+    }
+
+    if (maybeError && typeof maybeError === "object") {
+      const code = "code" in maybeError ? String(maybeError.code) : "UNKNOWN_ERROR";
+      const message = "message" in maybeError ? String(maybeError.message) : `Request failed with ${response.status}`;
+      const details = "details" in maybeError && maybeError.details
+        ? ` Details: ${JSON.stringify(maybeError.details)}`
+        : "";
+      throw new Error(`${code}: ${message}${details}`);
+    }
+
+    throw new Error(`Request failed with ${response.status}`);
   }
   return payload;
 }

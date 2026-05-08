@@ -1,8 +1,13 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowRight, MapPinned, Route, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { useOnboardingGate } from "@/hooks/use-onboarding-gate";
 
 const pillars = [
   {
@@ -20,25 +25,37 @@ const pillars = [
 ];
 
 export default function HomePage() {
+  const router = useRouter();
+  const { isLoading, isOnboarded } = useOnboardingGate();
+
+  useEffect(() => {
+    if (!isLoading && isOnboarded) {
+      router.replace("/dashboard");
+    }
+  }, [isLoading, isOnboarded, router]);
+
+  if (!isLoading && isOnboarded) {
+    return (
+      <main className="page-shell min-h-screen px-5 py-8 md:px-10 lg:px-14">
+        <div className="mx-auto max-w-3xl">
+          <Card>
+            <CardTitle>Opening your dashboard...</CardTitle>
+            <CardDescription className="mt-3">
+              We found your founder profile and are taking you to the dashboard.
+            </CardDescription>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="page-shell min-h-screen px-5 py-8 md:px-10 lg:px-14">
       <div className="mx-auto flex max-w-7xl flex-col gap-8">
-        <header className="flex items-center justify-between rounded-full border border-white/60 bg-white/70 px-5 py-3 shadow-panel backdrop-blur-sm">
-          <div>
-            <p className="font-display text-lg font-semibold">Founder GPS</p>
-            <p className="text-xs uppercase tracking-[0.18em] text-ink/55">Utah navigation layer</p>
-          </div>
-          <nav className="hidden items-center gap-5 text-sm text-ink/72 md:flex">
-            <Link href="/onboarding">Onboarding</Link>
-            <Link href="/dashboard">Dashboard</Link>
-            <Link href="/map">Map</Link>
-            <Link href="/roadmap">Roadmap</Link>
-          </nav>
-        </header>
-
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <Card className="relative overflow-hidden bg-[linear-gradient(145deg,#11203b,#18365f)] p-8 text-white md:p-12">
-            <div className="absolute inset-0 bg-grain opacity-80" />
+          <Card className="relative overflow-hidden border-primary/25 bg-[linear-gradient(145deg,#0d2a4c,#1f4575)] text-white md:p-12">
+            <div className="absolute inset-0 bg-grain opacity-70" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(67,167,157,0.35),transparent_40%)]" />
             <div className="relative flex flex-col gap-7">
               <Badge className="w-fit border-white/20 bg-white/10 text-white">Phase 5 in motion</Badge>
               <div className="max-w-3xl space-y-5">
@@ -81,12 +98,12 @@ export default function HomePage() {
 
           <div className="grid gap-6">
             {pillars.map((pillar) => (
-              <Card key={pillar.title} className="bg-white/72">
+              <Card key={pillar.title} className="border-border/70 bg-card/85">
                 <CardTitle>{pillar.title}</CardTitle>
                 <CardDescription className="mt-3">{pillar.body}</CardDescription>
               </Card>
             ))}
-            <Card className="bg-[#ffefe0]">
+            <Card className="border-secondary/35 bg-secondary/10">
               <CardTitle>Demo-ready flow</CardTitle>
               <CardDescription className="mt-3">
                 From intake to dashboard, every step is connected: analysis, ranking, routing, and roadmap generation.

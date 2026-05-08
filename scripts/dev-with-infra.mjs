@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 
 const REQUIRED_SERVICES = ["postgres", "osrm"];
+const DEV_PORTS = [3000, 3001, 3002, 4001, 4002, 4003, 4004];
 
 function runSync(command, args, options = {}) {
   return spawnSync(command, args, {
@@ -12,6 +13,78 @@ function runSync(command, args, options = {}) {
 
 function getPnpmCommand() {
   return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+}
+
+function getListeningPidsByPort(ports) {
+  const pids = new Set();
+
+  for (const port of ports) {
+    const result = runSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"]);
+    if (result.status !== 0) {
+      continue;
+    }
+
+    for (const line of (result.stdout || "").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const pid = Number(trimmed);
+      if (Number.isInteger(pid) && pid > 0) {
+        pids.add(pid);
+      }
+    }
+  }
+
+  return pids;
+}
+
+function getProcessCommand(pid) {
+  const result = runSync("ps", ["-p", String(pid), "-o", "comm="]);
+  if (result.status !== 0) {
+    return "";
+  }
+  return (result.stdout || "").trim().toLowerCase();
+}
+
+function clearStaleLocalDevPorts() {
+  const lsofCheck = runSync("lsof", ["-v"]);
+  if (lsofCheck.error || lsofCheck.status !== 0) {
+    console.warn("[dev] Skipping port cleanup: lsof is not available on this system.");
+    return;
+  }
+
+  const pids = getListeningPidsByPort(DEV_PORTS);
+  if (pids.size === 0) {
+    return;
+  }
+
+  const nodePids = [];
+  const skipped = [];
+
+  for (const pid of pids) {
+    const command = getProcessCommand(pid);
+    if (command.includes("node") || command.includes("next-server") || command.includes("next")) {
+      nodePids.push(pid);
+    } else {
+      skipped.push({ pid, command: command || "unknown" });
+    }
+  }
+
+  if (nodePids.length > 0) {
+    const kill = runSync("kill", ["-9", ...nodePids.map((pid) => String(pid))]);
+    if (kill.status === 0) {
+      console.log(`[dev] Cleared stale Node listeners on dev ports (PIDs: ${nodePids.join(", ")})`);
+    } else {
+      console.warn(`[dev] Failed to kill some stale Node listeners (PIDs: ${nodePids.join(", ")})`);
+    }
+  }
+
+  if (skipped.length > 0) {
+    const skippedSummary = skipped.map((entry) => `${entry.pid}:${entry.command}`).join(", ");
+    console.warn(`[dev] Found non-Node listeners on dev ports (left untouched): ${skippedSummary}`);
+  }
 }
 
 function checkDockerAvailable() {
@@ -108,8 +181,15 @@ function startDevApps() {
 function main() {
   const args = new Set(process.argv.slice(2));
   const skipInfra = args.has("--skip-infra");
+  const skipPortCleanup = args.has("--skip-port-cleanup");
 
   try {
+    if (!skipPortCleanup) {
+      clearStaleLocalDevPorts();
+    } else {
+      console.log("[dev] Skipping stale port cleanup (--skip-port-cleanup)");
+    }
+
     if (!skipInfra) {
       ensureInfraRunning();
     } else {

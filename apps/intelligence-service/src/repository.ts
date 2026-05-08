@@ -27,12 +27,12 @@ export interface IntelligenceRepository {
 export class PgIntelligenceRepository implements IntelligenceRepository {
   constructor(private readonly pool: Pool) {}
 
-  async saveFounderAnalysisSnapshot(params: {
+  private async insertSnapshot(params: {
     founderProfileId?: string;
     analysis: unknown;
     metadata: AiMetadata;
-  }): Promise<AnalysisSnapshot> {
-    const result = await this.pool.query(
+  }) {
+    return this.pool.query(
       `
         INSERT INTO founder_analysis_snapshots (
           founder_profile_id,
@@ -71,6 +71,25 @@ export class PgIntelligenceRepository implements IntelligenceRepository {
         params.metadata.fallbackUsed
       ]
     );
+  }
+
+  async saveFounderAnalysisSnapshot(params: {
+    founderProfileId?: string;
+    analysis: unknown;
+    metadata: AiMetadata;
+  }): Promise<AnalysisSnapshot> {
+    let result;
+    try {
+      result = await this.insertSnapshot(params);
+    } catch (error) {
+      // Allow analysis snapshots even when founder profile hasn't been persisted yet.
+      const maybePgError = error as { code?: string };
+      if (maybePgError.code === "23503" && params.founderProfileId) {
+        result = await this.insertSnapshot({ ...params, founderProfileId: undefined });
+      } else {
+        throw error;
+      }
+    }
 
     const row = result.rows[0];
     return {

@@ -7,7 +7,9 @@ export function saveDashboardRun(payload: unknown) {
     return;
   }
 
-  window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+  const serialized = JSON.stringify(payload);
+  window.localStorage.setItem(SESSION_KEY, serialized);
+  window.sessionStorage.setItem(SESSION_KEY, serialized);
 }
 
 export function loadDashboardRun<T>() {
@@ -15,14 +17,28 @@ export function loadDashboardRun<T>() {
     return null as T | null;
   }
 
-  const raw = window.sessionStorage.getItem(SESSION_KEY);
+  const raw =
+    window.localStorage.getItem(SESSION_KEY) ?? window.sessionStorage.getItem(SESSION_KEY);
+
   if (!raw) {
     return null as T | null;
   }
 
   try {
-    return JSON.parse(raw) as T;
+    const parsed = JSON.parse(raw) as T;
+    // Backfill any older session-only state into localStorage for returning users.
+    window.localStorage.setItem(SESSION_KEY, raw);
+    return parsed;
   } catch {
     return null as T | null;
   }
+}
+
+export function clearDashboardRun() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(SESSION_KEY);
+  window.sessionStorage.removeItem(SESSION_KEY);
 }

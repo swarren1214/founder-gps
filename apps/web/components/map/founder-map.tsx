@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import { IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { IconLayer, PathLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { cn } from "@/lib/utils";
 import type { FounderRoute, Recommendation, ResourceCardData } from "@/lib/schemas";
 
 type FounderMapProps = {
@@ -11,25 +12,148 @@ type FounderMapProps = {
   recommendations: Recommendation[];
   route: FounderRoute | null;
   founderLocation: { lat: number; lng: number; city: string };
+  className?: string;
 };
 
-const categoryColors: Record<string, [number, number, number, number]> = {
-  community: [15, 106, 116, 220],
-  investor: [255, 122, 26, 220],
-  university: [29, 78, 216, 220],
-  coworking: [123, 97, 255, 220],
-  accelerator: [219, 39, 119, 220],
-  incubator: [22, 163, 74, 220]
-};
+// Pin SVG geometry constants (viewBox 0 0 80 94)
+// Circle: cx=40, cy=32, r=20  Anchor (tip): x=40, y=88
+const PIN_W = 80;
+const PIN_H = 94;
+const PIN_CIRCLE_CX = 40;
+const PIN_CIRCLE_CY = 32;
+const PIN_CIRCLE_R = 20;
+const PIN_ANCHOR_Y = 88;
 
-export function FounderMap({ resources, recommendations, route, founderLocation }: FounderMapProps) {
+const PIN_PATH = "M40 88c0 0 25-28 25-46 0-14-11-25-25-25S15 28 15 42c0 18 25 46 25 46z";
+
+async function buildPinIcon(logoUrl: string | null, isRecommended: boolean): Promise<string> {
+  const scale = 2; // retina canvas
+  const canvas = document.createElement("canvas");
+  canvas.width = PIN_W * scale;
+  canvas.height = PIN_H * scale;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    // Fallback: plain SVG data URL (no logo)
+    const fill = isRecommended ? "#0f6a74" : "#11203b";
+    const stroke = isRecommended ? "#43A79D" : "#009C8D";
+    return (
+      "data:image/svg+xml;charset=utf-8," +
+      encodeURIComponent(
+        `<svg xmlns='http://www.w3.org/2000/svg' width='${PIN_W}' height='${PIN_H}' viewBox='0 0 ${PIN_W} ${PIN_H}'><path d='${PIN_PATH}' fill='${fill}'/><circle cx='${PIN_CIRCLE_CX}' cy='${PIN_CIRCLE_CY}' r='${PIN_CIRCLE_R}' fill='#ffffff' stroke='${stroke}' stroke-width='3'/></svg>`
+      )
+    );
+  }
+
+  ctx.scale(scale, scale);
+
+  const pinColor = isRecommended ? "#0f6a74" : "#11203b";
+  const strokeColor = isRecommended ? "#43A79D" : "#009C8D";
+
+  // Pin body
+  ctx.fillStyle = pinColor;
+  ctx.fill(new Path2D(PIN_PATH));
+
+  // Logo clipped to circle (fills edge-to-edge), then stroke drawn on top
+  if (logoUrl) {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("logo load failed"));
+        img.src = logoUrl;
+      });
+      // Fill circle with white first (in case logo has transparency)
+      ctx.beginPath();
+      ctx.arc(PIN_CIRCLE_CX, PIN_CIRCLE_CY, PIN_CIRCLE_R, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      // Clip and draw logo to exactly fill the circle
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(PIN_CIRCLE_CX, PIN_CIRCLE_CY, PIN_CIRCLE_R, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(
+        img,
+        PIN_CIRCLE_CX - PIN_CIRCLE_R,
+        PIN_CIRCLE_CY - PIN_CIRCLE_R,
+        PIN_CIRCLE_R * 2,
+        PIN_CIRCLE_R * 2
+      );
+      ctx.restore();
+    } catch {
+      // Logo failed — draw plain white circle
+      ctx.beginPath();
+      ctx.arc(PIN_CIRCLE_CX, PIN_CIRCLE_CY, PIN_CIRCLE_R, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+    }
+  } else {
+    // No logo — plain white circle
+    ctx.beginPath();
+    ctx.arc(PIN_CIRCLE_CX, PIN_CIRCLE_CY, PIN_CIRCLE_R, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+  }
+
+  // Stroke ring drawn on top of logo
+  ctx.beginPath();
+  ctx.arc(PIN_CIRCLE_CX, PIN_CIRCLE_CY, PIN_CIRCLE_R, 0, Math.PI * 2);
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  return canvas.toDataURL("image/png");
+}
+
+type ResourcePin = ResourceCardData & { pinIconUrl: string };
+
+function getDomainFromUrl(url: string | null): string | null {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+export function FounderMap({ resources, recommendations, route, founderLocation, className }: FounderMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<maplibregl.Map | null>(null);
+  const [showPins, setShowPins] = useState(true);
 
   const recommendedIds = useMemo(
     () => new Set(recommendations.map((recommendation) => recommendation.resourceId)),
     [recommendations]
   );
+
+  const [resourcePins, setResourcePins] = useState<ResourcePin[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all(
+      resources.map(async (resource) => {
+        const domain = getDomainFromUrl(resource.website);
+        const logoUrl = domain
+          ? `/api/logo?domain=${encodeURIComponent(domain)}&size=64`
+          : (resource.logoUrl ?? null);
+        const isRecommended = recommendedIds.has(resource.id);
+        const pinIconUrl = await buildPinIcon(logoUrl, isRecommended);
+        return { ...resource, pinIconUrl };
+      })
+    ).then((pins) => {
+      if (!cancelled) setResourcePins(pins);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resources, recommendedIds]);
 
   useEffect(() => {
     if (!mapRef.current || instanceRef.current) {
@@ -38,25 +162,7 @@ export function FounderMap({ resources, recommendations, route, founderLocation 
 
     const map = new maplibregl.Map({
       container: mapRef.current,
-      style: {
-        version: 8,
-        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-        sources: {
-          osm: {
-            type: "raster",
-            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "© OpenStreetMap contributors"
-          }
-        },
-        layers: [
-          {
-            id: "osm",
-            type: "raster",
-            source: "osm"
-          }
-        ]
-      },
+      style: "https://tiles.openfreemap.org/styles/liberty",
       center: [founderLocation.lng, founderLocation.lat],
       zoom: 8.2
     });
@@ -81,6 +187,15 @@ export function FounderMap({ resources, recommendations, route, founderLocation 
 
     const overlay = new MapboxOverlay({
       interleaved: true,
+      getTooltip: ({ layer, object }) => {
+        if (layer?.id === "resources-pin-layer" && object && "name" in object) {
+          return {
+            text: (object as ResourceCardData).name
+          };
+        }
+
+        return null;
+      },
       layers: [
         new ScatterplotLayer({
           id: "founder-location-layer",
@@ -90,34 +205,27 @@ export function FounderMap({ resources, recommendations, route, founderLocation 
           getRadius: 140,
           radiusUnits: "meters"
         }),
-        new IconLayer<ResourceCardData>({
-          id: "recommended-resources-layer",
-          data: resources,
-          getPosition: (resource) => [resource.lng, resource.lat],
-          getIcon: () => ({
-            url:
-              "data:image/svg+xml;charset=utf-8," +
-              encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="24" fill="#11203b"/><circle cx="32" cy="32" r="14" fill="#ff7a1a"/></svg>'),
-            width: 64,
-            height: 64,
-            anchorY: 32
-          }),
-          sizeScale: 0.7,
-          getSize: (resource) => (recommendedIds.has(resource.id) ? 54 : 36),
-          getColor: (resource) => categoryColors[resource.category] ?? [15, 106, 116, 220],
-          pickable: true
-        }),
-        new TextLayer<ResourceCardData>({
-          id: "resource-label-layer",
-          data: resources.filter((resource) => recommendedIds.has(resource.id)),
-          getPosition: (resource) => [resource.lng, resource.lat],
-          getText: (resource) => resource.name,
-          getColor: [17, 32, 59, 220],
-          getSize: 14,
-          getTextAnchor: "start",
-          getAlignmentBaseline: "center",
-          getPixelOffset: [18, -12]
-        }),
+        ...(showPins
+          ? [
+              new IconLayer<ResourcePin>({
+                id: "resources-pin-layer",
+                data: resourcePins,
+                getPosition: (resource) => [resource.lng, resource.lat],
+                getIcon: (resource) => ({
+                  url: resource.pinIconUrl,
+                  // Canvas is drawn at 2x (retina): PIN_W*2 × PIN_H*2
+                  width: PIN_W * 2,
+                  height: PIN_H * 2,
+                  anchorX: PIN_W, // center x = 40*2
+                  anchorY: PIN_ANCHOR_Y * 2 // pin tip = 88*2
+                }),
+                getSize: (resource) => (recommendedIds.has(resource.id) ? 72 : 64),
+                sizeUnits: "pixels",
+                sizeScale: 1,
+                pickable: true
+              })
+            ]
+          : []),
         new PathLayer({
           id: "route-line-layer",
           data: routeCoordinates.length > 1 ? [{ path: routeCoordinates }] : [],
@@ -134,7 +242,30 @@ export function FounderMap({ resources, recommendations, route, founderLocation 
     return () => {
       map.removeControl(overlay);
     };
-  }, [resources, recommendations, route, founderLocation.city, founderLocation.lat, founderLocation.lng, recommendedIds]);
+  }, [
+    resources,
+    recommendations,
+    route,
+    founderLocation.city,
+    founderLocation.lat,
+    founderLocation.lng,
+    recommendedIds,
+    resourcePins,
+    showPins
+  ]);
 
-  return <div ref={mapRef} className="h-[420px] w-full overflow-hidden rounded-[28px]" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={mapRef} className={cn("h-[420px] w-full overflow-hidden rounded-[28px]", className)} />
+      <button
+        type="button"
+        onClick={() => setShowPins((current) => !current)}
+        className="absolute left-5 top-5 z-40 inline-flex items-center rounded-full border border-slate-300/90 bg-white/95 px-4 py-2 text-sm font-semibold text-slate-900 shadow-md backdrop-blur transition hover:bg-white dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-900"
+        aria-pressed={showPins}
+        aria-label={showPins ? "Hide resource pins" : "Show resource pins"}
+      >
+        {showPins ? "Hide pins" : "Show pins"}
+      </button>
+    </div>
+  );
 }
