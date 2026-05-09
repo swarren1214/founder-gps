@@ -297,7 +297,8 @@ export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
           founderProfile: run.founderProfile,
           analysis: run.analysis,
           recommendations: run.recommendations,
-          resources: run.resources
+          resources: run.resources,
+          startups: run.startups
         })
       });
 
@@ -483,13 +484,12 @@ export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
             />
             <Button
               type="button"
-              variant="secondary"
-              size="sm"
+              variant="outline"
+              size="icon"
               onClick={() => addTask(timeframe)}
-              className="h-10 rounded-full px-4"
+              className="h-10 w-10 p-4"
             >
               <Plus className="h-4 w-4" />
-              Add
             </Button>
           </div>
         </div>

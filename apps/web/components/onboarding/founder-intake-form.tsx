@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   founderIntakeSchema,
@@ -13,11 +13,55 @@ import { saveDashboardRun } from "@/lib/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { AddressAutocompleteInput } from "@/components/ui/address-autocomplete-input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Brain,
+  ChartNoAxesCombined,
+  Building2,
+  CalendarDays,
+  Check,
+  FileText,
+  Flag,
+  Globe,
+  ImageIcon,
+  MapPin,
+  MessageSquareText,
+  PiggyBank,
+  Phone,
+  Rocket,
+  Send,
+  Sparkles,
+  Sprout,
+  TrendingUp,
+  UploadCloud,
+  User,
+  UserPlus,
+  Users,
+  Wand2,
+  X,
+  ListStart,
+  type LucideIcon
+} from "lucide-react";
 
 const stageOptions = ["pre-revenue", "seed", "series-a", "series-b-plus", "bootstrapped", "growth"] as const;
+type StageOption = (typeof stageOptions)[number];
+
+const stageOptionMeta: Record<StageOption, { label: string; icon: LucideIcon }> = {
+  "pre-revenue": { label: "Pre Revenue", icon: ListStart },
+  seed: { label: "Seed", icon: Sprout },
+  "series-a": { label: "Series A", icon: Rocket },
+  "series-b-plus": { label: "Series B Plus", icon: ChartNoAxesCombined },
+  bootstrapped: { label: "Bootstrapped", icon: PiggyBank },
+  growth: { label: "Growth", icon: TrendingUp }
+};
 
 const interviewQuestions = [
   "What problem are you obsessed with solving?",
@@ -81,18 +125,51 @@ const defaultState: OnboardingState = {
   description: ""
 };
 
-const steps = [
-  { title: "Identity", helper: "Your personal basics" },
-  { title: "Avatar", helper: "Upload profile image" },
-  { title: "Company Info", helper: "Core business information" },
-  { title: "Details", helper: "Stage and company description" },
-  { title: "Founder Interview", helper: "Answer AI prompts" }
-] as const;
+type OnboardingStep = {
+  title: string;
+  helper: string;
+  icon: LucideIcon;
+};
 
-const onboardingJourneySteps = [
-  { title: "Create account", helper: "Set your login credentials" },
+const steps: OnboardingStep[] = [
+  { title: "Identity", helper: "Your personal basics", icon: User },
+  { title: "Avatar", helper: "Upload profile image", icon: ImageIcon },
+  { title: "Company Info", helper: "Core business information", icon: Building2 },
+  { title: "Details", helper: "Stage and company description", icon: FileText },
+  { title: "Founder Interview", helper: "Answer AI prompts", icon: MessageSquareText }
+];
+
+const onboardingJourneySteps: OnboardingStep[] = [
+  { title: "Create account", helper: "Set your login credentials", icon: UserPlus },
   ...steps
-] as const;
+];
+
+const ALLOWED_AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const HALF_WIDTH_FIELD_CLASS = "min-w-64 flex-1";
+const FULL_WIDTH_FIELD_CLASS = "w-full";
+
+function RequiredAsterisk() {
+  return <span className="ml-1 text-destructive">*</span>;
+}
+
+function normalizePhoneDigits(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 10);
+}
+
+function formatPhone(value: string): string {
+  const digits = normalizePhoneDigits(value);
+
+  if (digits.length <= 3) {
+    return digits;
+  }
+
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  }
+
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
 
 export function FounderIntakeForm() {
   const router = useRouter();
@@ -101,25 +178,197 @@ export function FounderIntakeForm() {
   const [form, setForm] = useState<OnboardingState>(defaultState);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
+  const [isAvatarDragActive, setIsAvatarDragActive] = useState(false);
   const [interview, setInterview] = useState<InterviewTurn[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [interviewPrompt, setInterviewPrompt] = useState(interviewQuestions[0]);
-  const [assistantMessage, setAssistantMessage] = useState(
-    "I am ARIA, your onboarding assistant. I will ask five quick questions to personalize your dashboard."
-  );
+  const [assistantMessage, setAssistantMessage] = useState("");
   const [isInterviewSubmitting, setIsInterviewSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submissionPhase, setSubmissionPhase] = useState<number>(-1);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const interviewEndRef = useRef<HTMLDivElement | null>(null);
+
+  const SUBMISSION_PHASES = [
+    { icon: FileText, message: "Summarizing your answers..." },
+    { icon: Brain, message: "Analyzing your responses..." },
+    { icon: Sparkles, message: "Building recommendations..." },
+    { icon: Wand2, message: "Personalizing your workspace..." },
+    { icon: Rocket, message: "Launching your founder dashboard..." }
+  ] as const;
 
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
-  const progress = useMemo(
-    () => ((stepIndex + 2) / onboardingJourneySteps.length) * 100,
-    [stepIndex]
-  );
+  const progress = useMemo(() => ((stepIndex + 1) / onboardingJourneySteps.length) * 100, [stepIndex]);
+  const activeAssistantBubble = assistantMessage.trim() || interviewPrompt;
+  const avatarFallbackInitials = useMemo(() => {
+    const initials = [form.firstName, form.lastName]
+      .map((value) => value.trim().charAt(0))
+      .filter(Boolean)
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+
+    return initials || "FG";
+  }, [form.firstName, form.lastName]);
+  const isCurrentStepValid = useMemo(() => {
+    if (stepIndex === 0) {
+      return Boolean(form.firstName.trim() && form.lastName.trim() && normalizePhoneDigits(form.phone).length === 10);
+    }
+
+    if (stepIndex === 1) {
+      return true;
+    }
+
+    if (stepIndex === 2) {
+      return Boolean(
+        form.companyName.trim() &&
+          form.companySize.trim() &&
+          form.dateFounded.trim() &&
+          form.website.trim() &&
+          form.address.trim()
+      );
+    }
+
+    if (stepIndex === 3) {
+      return Boolean(form.stage && form.description.trim());
+    }
+
+    if (stepIndex === 4) {
+      return interview.length >= interviewQuestions.length;
+    }
+
+    return false;
+  }, [
+    stepIndex,
+    form.firstName,
+    form.lastName,
+    form.phone,
+    avatarFile,
+    avatarPreviewUrl,
+    form.companyName,
+    form.companySize,
+    form.dateFounded,
+    form.website,
+    form.address,
+    form.stage,
+    form.description,
+    interview.length
+  ]);
 
   function updateField<K extends keyof OnboardingState>(key: K, value: OnboardingState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
+
+  function clearAvatarSelection() {
+    setAvatarFile(null);
+    setAvatarNotice(null);
+
+    if (avatarPreviewUrl) {
+      URL.revokeObjectURL(avatarPreviewUrl);
+    }
+
+    setAvatarPreviewUrl(null);
+
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = "";
+    }
+  }
+
+  function selectAvatarFile(nextFile: File | null) {
+    if (!nextFile) {
+      clearAvatarSelection();
+      return;
+    }
+
+    if (!ALLOWED_AVATAR_TYPES.has(nextFile.type)) {
+      setAvatarNotice("Use PNG, JPG, WEBP, or GIF for your avatar.");
+      return;
+    }
+
+    if (nextFile.size > MAX_AVATAR_BYTES) {
+      setAvatarNotice("Avatar must be 2MB or smaller.");
+      return;
+    }
+
+    if (avatarPreviewUrl) {
+      URL.revokeObjectURL(avatarPreviewUrl);
+    }
+
+    setAvatarFile(nextFile);
+    setAvatarPreviewUrl(URL.createObjectURL(nextFile));
+    setAvatarNotice(null);
+  }
+
+  function handleAvatarDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsAvatarDragActive(false);
+    selectAvatarFile(event.dataTransfer.files?.[0] ?? null);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
+    };
+  }, [avatarPreviewUrl]);
+
+  useEffect(() => {
+    if (stepIndex !== 4 || interview.length > 0 || assistantMessage.trim()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/onboarding/interview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            turns: [],
+            context: {
+              stage: form.stage,
+              companyName: form.companyName
+            }
+          })
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as OnboardingInterviewResponse;
+        const validated = onboardingInterviewResponseSchema.parse(payload);
+        if (cancelled) {
+          return;
+        }
+
+        setAssistantMessage(validated.assistantMessage);
+        if (validated.nextQuestion) {
+          setInterviewPrompt(validated.nextQuestion);
+        }
+      } catch {
+        if (!cancelled) {
+          setAssistantMessage(interviewQuestions[0]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assistantMessage, form.companyName, form.stage, interview.length, stepIndex]);
+
+  useEffect(() => {
+    if (stepIndex !== 4) {
+      return;
+    }
+
+    interviewEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [assistantMessage, interview.length, isInterviewSubmitting, stepIndex]);
 
   function nextStep() {
     if (stepIndex === steps.length - 1 && interview.length < interviewQuestions.length) {
@@ -150,13 +399,14 @@ export function FounderIntakeForm() {
     setInterview(nextTurns);
     setChatInput("");
     setIsInterviewSubmitting(true);
+    setAssistantMessage("");
 
     try {
       const response = await fetch("/api/onboarding/interview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          turns: interview,
+          turns: nextTurns,
           currentAnswer: answer,
           context: {
             stage: form.stage,
@@ -173,11 +423,7 @@ export function FounderIntakeForm() {
       }
     } catch {
       const fallbackQuestion = interviewQuestions[nextTurns.length] ?? null;
-      setAssistantMessage(
-        fallbackQuestion
-          ? `Thanks, that helps. Next: ${fallbackQuestion}`
-          : "Great answers. Your founder interview is complete."
-      );
+      setAssistantMessage(fallbackQuestion ?? "Thanks. I have enough to complete your founder interview.");
       if (fallbackQuestion) {
         setInterviewPrompt(fallbackQuestion);
       }
@@ -189,24 +435,24 @@ export function FounderIntakeForm() {
   }
 
   function buildFounderIntakePayload(): FounderIntake {
-      const challenge = interview[4]?.answer || interview[0]?.answer || "Needs clearer growth constraint";
-      const background = interview[2]?.answer || "Founder provided onboarding context";
+    const challenge = interview[4]?.answer || interview[0]?.answer || "Needs clearer growth constraint";
+    const background = interview[2]?.answer || "Founder provided onboarding context";
     const cityGuess = form.address.split(",")[1]?.trim() || "Lehi";
-      const idea = form.description.trim() || interview[0]?.answer || "Founder-provided company thesis";
-      const industryGuess = form.description.toLowerCase().includes("ai")
-        ? "ai"
-        : form.description.toLowerCase().includes("health")
-          ? "health"
-          : "general";
+    const idea = form.description.trim() || interview[0]?.answer || "Founder-provided company thesis";
+    const industryGuess = form.description.toLowerCase().includes("ai")
+      ? "ai"
+      : form.description.toLowerCase().includes("health")
+        ? "health"
+        : "general";
 
     return {
       founderProfileId: crypto.randomUUID(),
       locationCity: cityGuess,
       locationLat: 40.3916,
       locationLng: -111.8508,
-        idea,
-        industry: industryGuess,
-        stage: deriveFounderStage(form.stage),
+      idea,
+      industry: industryGuess,
+      stage: deriveFounderStage(form.stage),
       challenge,
       fundingStatus: form.stage || "bootstrapped",
       background,
@@ -223,9 +469,12 @@ export function FounderIntakeForm() {
       return;
     }
 
+    setSubmissionPhase(0);
+
     startTransition(async () => {
       try {
         setError(null);
+
         trackEvent("founder_flow_started", {
           stage: form.stage || "unknown",
           city: form.address,
@@ -246,6 +495,8 @@ export function FounderIntakeForm() {
           }
         }
 
+        setSubmissionPhase(1);
+
         const response = await fetch("/api/founder-flow", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -258,6 +509,9 @@ export function FounderIntakeForm() {
         }
 
         saveDashboardRun(payload);
+
+        setSubmissionPhase(2);
+
         const onboardingContext = {
           schemaVersion: 1,
           identity: {
@@ -286,18 +540,41 @@ export function FounderIntakeForm() {
           }))
         };
 
-        await fetch("/api/auth/profile", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            firstName: form.firstName || null,
-            lastName: form.lastName || null,
-            companyName: form.companyName || null,
-            locationCity: form.address || null,
-            onboardingContext,
-            onboardingStatus: "completed"
+        const employeeCount = form.companySize ? parseInt(form.companySize, 10) : null;
+        const yearFounded = form.dateFounded ? new Date(form.dateFounded).getFullYear() : null;
+
+        await Promise.all([
+          fetch("/api/auth/profile", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              firstName: form.firstName || null,
+              lastName: form.lastName || null,
+              companyName: form.companyName || null,
+              locationCity: form.address || null,
+              onboardingContext,
+              onboardingStatus: "completed"
+            })
+          }),
+          fetch("/api/startups", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: form.companyName,
+              website: form.website || null,
+              employees: Number.isFinite(employeeCount) ? employeeCount : null,
+              yearFounded: Number.isFinite(yearFounded) ? yearFounded : null,
+              description: form.description || null,
+              address: form.address || null,
+              stage: form.stage || null,
+              dateFounded: form.dateFounded || null,
+              phone: form.phone || null,
+              onboardingContext
+            })
           })
-        });
+        ]);
+
+        setSubmissionPhase(3);
 
         trackEvent("founder_flow_completed", {
           recommendations: payload.recommendations.length,
@@ -305,216 +582,461 @@ export function FounderIntakeForm() {
           hasRoadmap: Boolean(payload.roadmap)
         });
 
+        setSubmissionPhase(4);
+
         router.push("/authed/dashboard");
       } catch (submissionError) {
+        setSubmissionPhase(-1);
         setError(submissionError instanceof Error ? submissionError.message : "Unable to complete founder flow.");
       }
     });
   }
 
   return (
-    <Card className="border-border/60 bg-card/95 shadow-2xl">
-      <div className="mb-6 rounded-2xl border border-border/70 bg-muted/35 p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <Badge>Onboarding</Badge>
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{Math.round(progress)}% complete</p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
-          {onboardingJourneySteps.map((item, index) => {
-            const isActive = index === stepIndex + 1;
-            const isCompleted = index < stepIndex + 1;
-
-            return (
-              <div
-                key={item.title}
-                className={`rounded-xl border px-3 py-2 ${
-                  isActive
-                    ? "border-primary bg-primary/10"
-                    : isCompleted
-                      ? "border-emerald-500/35 bg-emerald-500/10"
-                      : "border-border/70 bg-background/60"
-                }`}
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Step {index + 1}</p>
-                <p className="mt-1 text-sm font-medium text-foreground">{item.title}</p>
-                <p className="text-xs text-muted-foreground">{item.helper}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mb-8 flex items-center justify-between gap-4 border-b border-border pb-6">
-        <div>
-          <Badge>{step.title}</Badge>
-          <CardTitle className="mt-4">Complete your founder onboarding</CardTitle>
-          <CardDescription className="mt-2">
-            We will save this context to your profile and personalize your founder workspace.
-          </CardDescription>
-        </div>
-        <div className="min-w-30 text-right">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Progress</p>
-          <p className="font-display text-3xl">{Math.round(progress)}%</p>
-        </div>
-      </div>
-
-        <div className="mb-8 h-3 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-[linear-gradient(90deg,#0f6a74,#ff7a1a)]" style={{ width: `${progress}%` }} />
-        </div>
-
-        <div className="grid gap-5 text-foreground md:grid-cols-2">
-          {stepIndex === 0 ? (
-            <>
-              <div>
-                <Label htmlFor="firstName">First name</Label>
-                <Input id="firstName" value={form.firstName} onChange={(event) => updateField("firstName", event.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="lastName">Last name</Label>
-                <Input id="lastName" value={form.lastName} onChange={(event) => updateField("lastName", event.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="phone">Phone number</Label>
-                <Input id="phone" value={form.phone} onChange={(event) => updateField("phone", event.target.value)} />
-              </div>
-            </>
-          ) : null}
-
-          {stepIndex === 1 ? (
-            <>
-              <div className="md:col-span-2">
-                <Label htmlFor="avatarUpload">Profile avatar</Label>
-                <Input
-                  id="avatarUpload"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  onChange={(event) => {
-                    const nextFile = event.target.files?.[0] ?? null;
-                    setAvatarFile(nextFile);
-                    if (!nextFile) {
-                      setAvatarPreviewUrl(null);
-                      return;
-                    }
-
-                    const nextUrl = URL.createObjectURL(nextFile);
-                    setAvatarPreviewUrl(nextUrl);
-                  }}
+    <Card className="relative h-170 border-border/60 bg-card/95 shadow-2xl">
+      {submissionPhase >= 0 ? (() => {
+        const phase = SUBMISSION_PHASES[Math.min(submissionPhase, SUBMISSION_PHASES.length - 1)];
+        const PhaseIcon = phase.icon;
+        return (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-6 rounded-2xl bg-background/90 backdrop-blur-sm">
+            <div className="relative flex items-center justify-center">
+              <span className="absolute inline-flex h-24 w-24 animate-ping rounded-full bg-primary/20" />
+              <span className="relative flex h-20 w-20 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
+                <Spinner className="absolute h-14 w-14 text-primary/40" />
+                <PhaseIcon className="h-7 w-7 text-primary" />
+              </span>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-foreground">{phase.message}</p>
+              <p className="mt-1 text-sm text-muted-foreground">Step {submissionPhase + 1} of {SUBMISSION_PHASES.length}</p>
+            </div>
+            <div className="flex gap-1.5">
+              {SUBMISSION_PHASES.map((_, index) => (
+                <span
+                  key={index}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all duration-500",
+                    index <= submissionPhase ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/30"
+                  )}
                 />
-                {avatarPreviewUrl ? (
-                  <img
-                    src={avatarPreviewUrl}
-                    alt="Avatar preview"
-                    className="mt-3 h-16 w-16 rounded-full object-cover"
-                  />
-                ) : null}
-              </div>
-            </>
-          ) : null}
+              ))}
+            </div>
+          </div>
+        );
+      })() : null}
+      <div className="grid gap-6 lg:grid-cols-[300px_1fr] h-full">
+        <aside className="flex flex-col h-full rounded-2xl border border-border/70 bg-muted/35 p-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <Badge>Onboarding</Badge>
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{Math.round(progress)}% complete</p>
+          </div>
+          <div className="flex flex-col gap-3 flex-1">
+            {onboardingJourneySteps.map((item, index) => {
+              const isActive = index === stepIndex + 1;
+              const isCompleted = index < stepIndex + 1;
+              const StepIcon = item.icon;
 
-          {stepIndex === 2 ? (
-            <>
-              <div>
-                <Label htmlFor="companyName">Company name</Label>
-                <Input id="companyName" value={form.companyName} onChange={(event) => updateField("companyName", event.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="companySize">Number of employees</Label>
-                <Input id="companySize" type="number" min={1} value={form.companySize} onChange={(event) => updateField("companySize", event.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="dateFounded">Date founded</Label>
-                <Input id="dateFounded" type="date" value={form.dateFounded} onChange={(event) => updateField("dateFounded", event.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="website">Website</Label>
-                <Input id="website" type="url" value={form.website} onChange={(event) => updateField("website", event.target.value)} />
-              </div>
-              <div className="md:col-span-2">
-                <Label htmlFor="address">Address</Label>
-                <Input id="address" value={form.address} onChange={(event) => updateField("address", event.target.value)} />
-              </div>
-            </>
-          ) : null}
-
-          {stepIndex === 3 ? (
-            <>
-              <div>
-                <Label htmlFor="founderStage">Stage</Label>
-                <select
-                  id="founderStage"
-                  className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/25"
-                  value={form.stage}
-                  onChange={(event) => updateField("stage", event.target.value as OnboardingState["stage"])}
+              return (
+                <div
+                  key={item.title}
+                  className={`rounded-xl border p-4 justify-center h-full flex flex-col ${
+                    isActive
+                      ? "border-primary bg-primary/10"
+                      : isCompleted
+                        ? "border-emerald-500/35 bg-emerald-500/10"
+                        : "border-border/70 bg-background/60"
+                  }`}
                 >
-                  <option value="">Select stage</option>
-                  {stageOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <Label htmlFor="description">Company description</Label>
-                <Textarea id="description" value={form.description} onChange={(event) => updateField("description", event.target.value)} />
-              </div>
-            </>
-          ) : null}
-
-          {stepIndex === 4 ? (
-            <>
-              <div className="md:col-span-2 rounded-2xl border border-border bg-muted/40 p-4">
-                <p className="text-sm font-medium">Founder interview</p>
-                <p className="mt-1 text-xs text-muted-foreground">{assistantMessage}</p>
-              </div>
-              <div className="md:col-span-2 space-y-4">
-                {interview.map((turn, index) => (
-                  <div key={`${turn.question}-${index}`} className="rounded-xl border border-border bg-card px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Question {index + 1}</p>
-                    <p className="mt-1 text-sm font-medium">{turn.question}</p>
-                    <p className="mt-2 text-sm text-muted-foreground">{turn.answer}</p>
-                  </div>
-                ))}
-
-                {interview.length < interviewQuestions.length ? (
-                  <div className="rounded-xl border border-border bg-card px-4 py-3">
-                    <p className="text-sm font-medium">{interviewPrompt}</p>
-                    <Textarea
-                      className="mt-3"
-                      value={chatInput}
-                      onChange={(event) => setChatInput(event.target.value)}
-                      placeholder="Write your answer..."
-                    />
-                    <div className="mt-3 flex justify-end">
-                      <Button type="button" variant="secondary" onClick={addInterviewAnswer} disabled={isInterviewSubmitting}>
-                        {isInterviewSubmitting ? "Saving..." : "Save answer"}
-                      </Button>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
+                        isCompleted
+                          ? "border-emerald-500/50 bg-emerald-500 text-emerald-50"
+                          : "border-border/70 bg-background/80 text-muted-foreground"
+                      }`}
+                    >
+                      {isCompleted ? <Check className="h-4 w-4" /> : <StepIcon className="h-4 w-4" />}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{item.title}</p>
+                      <p className="text-xs text-muted-foreground">{item.helper}</p>
                     </div>
                   </div>
-                ) : (
-                  <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
-                    Interview complete.
+                </div>
+              );
+            })}
+          </div>
+        </aside>
+
+        <section className="flex flex-col h-full rounded-2xl border border-border/70 bg-background/70 p-5 md:p-6">
+          <div className="mb-8 flex items-center justify-between gap-4 border-b border-border pb-6">
+            <div>
+              <Badge>{step.title}</Badge>
+              <CardTitle className="mt-4">Complete your founder onboarding</CardTitle>
+              <CardDescription className="mt-2">
+                We will save this context to your profile and personalize your founder workspace.
+              </CardDescription>
+            </div>
+            <div className="min-w-30 text-right">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Progress</p>
+              <p className="font-display text-3xl">{Math.round(progress)}%</p>
+            </div>
+          </div>
+
+          <div className="mb-8 h-3 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-[linear-gradient(90deg,#0f6a74,#ff7a1a)]" style={{ width: `${progress}%` }} />
+          </div>
+
+          <div className="flex flex-1 min-h-0 flex-wrap content-start items-stretch gap-5 text-foreground">
+            {stepIndex === 0 ? (
+              <>
+                <div className={HALF_WIDTH_FIELD_CLASS}>
+                  <Label htmlFor="firstName" className="flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                    First name
+                    <RequiredAsterisk />
+                  </Label>
+                  <Input id="firstName" required value={form.firstName} onChange={(event) => updateField("firstName", event.target.value)} />
+                </div>
+                <div className={HALF_WIDTH_FIELD_CLASS}>
+                  <Label htmlFor="lastName" className="flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                    Last name
+                    <RequiredAsterisk />
+                  </Label>
+                  <Input id="lastName" required value={form.lastName} onChange={(event) => updateField("lastName", event.target.value)} />
+                </div>
+                <div className={FULL_WIDTH_FIELD_CLASS}>
+                  <Label htmlFor="phone" className="flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                    Phone number
+                    <RequiredAsterisk />
+                  </Label>
+                  <Input
+                    id="phone"
+                    required
+                    inputMode="tel"
+                    placeholder="(555) 123-4567"
+                    maxLength={14}
+                    value={form.phone}
+                    onChange={(event) => updateField("phone", formatPhone(event.target.value))}
+                  />
+                </div>
+              </>
+            ) : null}
+
+            {stepIndex === 1 ? (
+              <>
+                <div className={FULL_WIDTH_FIELD_CLASS}>
+                  <div className="mt-3">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-stretch">
+                      <div className="flex flex-col items-center justify-center text-center md:w-56 md:shrink-0">
+                        <Avatar className="size-28 border border-border/70">
+                          <AvatarImage src={avatarPreviewUrl ?? undefined} alt="Avatar preview" />
+                          <AvatarFallback>{avatarFallbackInitials}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Optional profile photo</p>
+                          <p className="text-xs text-muted-foreground">PNG, JPG, WEBP, GIF up to 2MB</p>
+                        </div>
+                      </div>
+
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <div
+                          className={cn(
+                            "cursor-pointer rounded-xl border-2 border-dashed p-5 text-center transition-colors",
+                            isAvatarDragActive
+                              ? "border-primary bg-primary/10"
+                              : "border-border/70 bg-background/60 hover:border-primary/50"
+                          )}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => avatarInputRef.current?.click()}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              avatarInputRef.current?.click();
+                            }
+                          }}
+                          onDragEnter={(event) => {
+                            event.preventDefault();
+                            setIsAvatarDragActive(true);
+                          }}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            setIsAvatarDragActive(true);
+                          }}
+                          onDragLeave={() => setIsAvatarDragActive(false)}
+                          onDrop={handleAvatarDrop}
+                        >
+                          <UploadCloud className="mx-auto h-6 w-6 text-muted-foreground" />
+                          <p className="mt-2 text-sm font-medium">Drag and drop an avatar</p>
+                          <p className="mt-1 text-xs text-muted-foreground">or click to browse files</p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="mt-3 rounded-md"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              avatarInputRef.current?.click();
+                            }}
+                          >
+                            Browse files
+                          </Button>
+                        </div>
+
+                        <Input
+                          ref={avatarInputRef}
+                          id="avatarUpload"
+                          type="file"
+                          className="hidden"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          onChange={(event) => selectAvatarFile(event.target.files?.[0] ?? null)}
+                        />
+
+                        {avatarFile ? (
+                          <div className="mt-3 flex items-center justify-between rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                            <span className="truncate pr-3">{avatarFile.name} ({Math.ceil(avatarFile.size / 1024)} KB)</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 rounded-md"
+                              aria-label="Clear selected file"
+                              onClick={clearAvatarSelection}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : null}
+
+                        {avatarNotice ? <p className="mt-3 text-xs font-medium text-destructive">{avatarNotice}</p> : null}
+                      </div>
+                    </div>
                   </div>
-                )}
+                </div>
+              </>
+            ) : null}
+
+            {stepIndex === 2 ? (
+              <>
+                <div className={HALF_WIDTH_FIELD_CLASS}>
+                  <Label htmlFor="companyName" className="flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    Company name
+                    <RequiredAsterisk />
+                  </Label>
+                  <Input id="companyName" required value={form.companyName} onChange={(event) => updateField("companyName", event.target.value)} />
+                </div>
+                <div className={HALF_WIDTH_FIELD_CLASS}>
+                  <Label htmlFor="companySize" className="flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                    Number of employees
+                    <RequiredAsterisk />
+                  </Label>
+                  <Input id="companySize" required type="number" min={1} value={form.companySize} onChange={(event) => updateField("companySize", event.target.value)} />
+                </div>
+                <div className={HALF_WIDTH_FIELD_CLASS}>
+                  <Label htmlFor="dateFounded" className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                    Date founded
+                    <RequiredAsterisk />
+                  </Label>
+                  <Input id="dateFounded" required type="date" value={form.dateFounded} onChange={(event) => updateField("dateFounded", event.target.value)} />
+                </div>
+                <div className={HALF_WIDTH_FIELD_CLASS}>
+                  <Label htmlFor="website" className="flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                    Website
+                    <RequiredAsterisk />
+                  </Label>
+                  <Input id="website" required type="url" value={form.website} onChange={(event) => updateField("website", event.target.value)} />
+                </div>
+                <div className={FULL_WIDTH_FIELD_CLASS}>
+                  <Label htmlFor="address" className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                    Address
+                    <RequiredAsterisk />
+                  </Label>
+                  <AddressAutocompleteInput
+                    id="address"
+                    required
+                    value={form.address}
+                    onChange={(nextAddress) => updateField("address", nextAddress)}
+                  />
+                </div>
+              </>
+            ) : null}
+
+            {stepIndex === 3 ? (
+              <>
+                <div className="flex w-fit">
+                  <fieldset>
+                    <legend className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+                      <Flag className="h-3.5 w-3.5 text-muted-foreground" />
+                      Stage
+                      <RequiredAsterisk />
+                    </legend>
+                    <div className="flex flex-row flex-wrap gap-2">
+                      <div className="w-fit space-y-2">
+                        {stageOptions.map((option) => {
+                          const optionId = `founderStage-${option}`;
+                          const isSelected = form.stage === option;
+                          const optionMeta = stageOptionMeta[option];
+                          const StageIcon = optionMeta.icon;
+
+                          return (
+                            <label
+                              key={option}
+                              htmlFor={optionId}
+                              className={cn(
+                                "flex cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                                isSelected
+                                  ? "border-primary bg-primary/10 text-foreground"
+                                  : "border-border/70 bg-card text-muted-foreground hover:bg-muted/40"
+                              )}
+                            >
+                              <input
+                                id={optionId}
+                                type="radio"
+                                name="founderStage"
+                                className="sr-only"
+                                checked={isSelected}
+                                onChange={() => updateField("stage", option)}
+                              />
+                              <StageIcon className="h-4 w-4" />
+                              <span>{optionMeta.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </fieldset>
+                </div>
+                <div className={HALF_WIDTH_FIELD_CLASS}>
+                  <Label htmlFor="description" className="flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                    Company description
+                    <RequiredAsterisk />
+                  </Label>
+                  <Textarea
+                    id="description"
+                    className="h-[calc(100%-1.75rem)] resize-none"
+                    required
+                    value={form.description}
+                    onChange={(event) => updateField("description", event.target.value)}
+                  />
+                </div>
+              </>
+            ) : null}
+
+            {stepIndex === 4 ? (
+              <div className="flex h-72.5 min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-xl">
+                <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <MessageSquareText className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">Founder Interview</h3>
+                  </div>
+                </div>
+
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3 space-y-4">
+                  {interview.map((turn, index) => (
+                    <div key={`${turn.question}-${index}`} className="space-y-3">
+                      <div className="flex justify-start">
+                        <div className="max-w-[85%] rounded-2xl rounded-bl-md border border-border/70 bg-muted/50 px-4 py-3 text-sm text-foreground shadow-sm">
+                          <p className="font-medium">{turn.question}</p>
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-3 text-sm text-secondary-foreground shadow-sm">
+                          {turn.answer}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {interview.length < interviewQuestions.length ? (
+                    <div className="flex justify-start">
+                      <div className="max-w-[85%] rounded-2xl rounded-bl-md border border-border/70 bg-muted/50 px-4 py-3 text-sm text-foreground shadow-sm">
+                        <p className="font-medium">{activeAssistantBubble}</p>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div ref={interviewEndRef} />
+                </div>
+
+                <div className="border-t border-border/50 p-3">
+                  {interview.length >= interviewQuestions.length ? (
+                    <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+                      Interview complete.
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
 
-        {error ? <p className="mt-6 text-sm font-medium text-destructive">{error}</p> : null}
+          <div className="mt-auto pt-8">
+            {error ? <p className="mb-4 text-sm font-medium text-destructive">{error}</p> : null}
 
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-          <Button variant="ghost" onClick={previousStep} disabled={stepIndex === 0 || isPending}>
-            Back
-          </Button>
-          {isLast ? (
-            <Button size="lg" onClick={submit} disabled={isPending}>
-              {isPending ? "Completing onboarding..." : "Complete onboarding"}
-            </Button>
-          ) : (
-            <Button size="lg" onClick={nextStep}>
-              Continue
-            </Button>
-          )}
-        </div>
+            <div className="flex w-full flex-wrap items-center justify-end gap-3">
+              {stepIndex === 4 && interview.length < interviewQuestions.length ? (
+                <form
+                  className="mr-auto flex min-w-80 flex-1 items-center gap-2 rounded-2xl border border-border/70 bg-background/80 p-2 shadow-sm"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void addInterviewAnswer();
+                  }}
+                >
+                  <Input
+                    value={chatInput}
+                    onChange={(event) => setChatInput(event.target.value)}
+                    placeholder="Type your answer..."
+                    className="h-10 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
+                  />
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 rounded-xl"
+                    disabled={isInterviewSubmitting || !chatInput.trim()}
+                    aria-label="Send answer"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </form>
+              ) : null}
+
+              <Button variant="default" size="icon" className="flex h-fit w-fit p-4 rounded-full" onClick={previousStep} disabled={stepIndex === 0 || isPending}>
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              {isLast ? (
+                <Button
+                  variant="default"
+                  size="icon"
+                  className="flex h-fit w-fit p-4 rounded-full"
+                  onClick={submit}
+                  disabled={isPending || !isCurrentStepValid}
+                  aria-label={isPending ? "Completing onboarding" : "Complete onboarding"}
+                >
+                  {isPending ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+                </Button>
+              ) : (
+                <Button
+                  variant="default"
+                  size="icon"
+                  className="flex h-fit w-fit p-4 rounded-full"
+                  onClick={nextStep}
+                  disabled={!isCurrentStepValid}
+                >
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
     </Card>
   );
 }

@@ -14,7 +14,8 @@ type FounderMapProps = {
   recommendations: Recommendation[];
   route: FounderRoute | null;
   founderLocation: { lat: number; lng: number; city: string };
-  showPins: boolean;
+  showStartupPins: boolean;
+  showResourcePins: boolean;
   selectedStartupId?: string | null;
   selectedResourceId?: string | null;
   onPinSelect?: (pin: { id: string; kind: "startup" | "resource" }) => void;
@@ -369,7 +370,8 @@ export function FounderMap({
   recommendations,
   route,
   founderLocation,
-  showPins,
+  showStartupPins,
+  showResourcePins,
   selectedStartupId = null,
   selectedResourceId = null,
   onPinSelect,
@@ -396,21 +398,25 @@ export function FounderMap({
 
   const allPins = useMemo<MapPin[]>(
     () => {
-      const baseStartupPins = startupPins.map((pin) => ({
-        ...pin,
-        kind: "startup" as const,
-        size: pin.id === selectedStartupId ? 80 : 56
-      }));
+      const baseStartupPins = showStartupPins
+        ? startupPins.map((pin) => ({
+            ...pin,
+            kind: "startup" as const,
+            size: pin.id === selectedStartupId ? 80 : 56
+          }))
+        : [];
 
-      const baseResourcePins = resourcePins.map((pin) => ({
-        id: pin.id,
-        kind: "resource" as const,
-        name: pin.name,
-        lat: pin.lat,
-        lng: pin.lng,
-        pinIconUrl: pin.pinIconUrl,
-        size: pin.id === selectedResourceId ? 82 : recommendedIds.has(pin.id) ? 72 : 64
-      }));
+      const baseResourcePins = showResourcePins
+        ? resourcePins.map((pin) => ({
+            id: pin.id,
+            kind: "resource" as const,
+            name: pin.name,
+            lat: pin.lat,
+            lng: pin.lng,
+            pinIconUrl: pin.pinIconUrl,
+            size: pin.id === selectedResourceId ? 82 : recommendedIds.has(pin.id) ? 72 : 64
+          }))
+        : [];
 
       if (!activeFilters || activeFilters.intent === "general") {
         return [...baseStartupPins, ...baseResourcePins];
@@ -490,7 +496,18 @@ export function FounderMap({
 
       return [...baseStartupPins, ...baseResourcePins];
     },
-    [resourcePins, startupPins, recommendedIds, selectedStartupId, selectedResourceId, activeFilters, startups, resources]
+    [
+      resourcePins,
+      startupPins,
+      recommendedIds,
+      selectedStartupId,
+      selectedResourceId,
+      activeFilters,
+      startups,
+      resources,
+      showStartupPins,
+      showResourcePins
+    ]
   );
 
   const clusteredPins = useMemo(() => {
@@ -762,7 +779,7 @@ export function FounderMap({
               })
             ]
           : []),
-        ...(showPins
+        ...((showStartupPins || showResourcePins)
           ? [
               ...(clusteredPins.clusters.length > 0
                 ? [
@@ -917,7 +934,8 @@ export function FounderMap({
     regularSinglePins,
     route,
     selectedSinglePins,
-    showPins,
+    showStartupPins,
+    showResourcePins,
     userLocation
   ]);
 

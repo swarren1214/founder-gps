@@ -51,6 +51,29 @@ describe("onboarding interview route", () => {
     expect(body.nextQuestion).toBeTruthy();
   });
 
+  it("advances when currentAnswer is newer than the submitted transcript", async () => {
+    const request = new Request("http://localhost/api/onboarding/interview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        turns: [],
+        currentAnswer: "I want to help homeowners stay ahead of maintenance costs.",
+        context: {
+          companyName: "Homekeeper",
+          stage: "pre-revenue"
+        }
+      })
+    });
+
+    const response = await POST(request as never);
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.source).toBe("deterministic");
+    expect(body.completed).toBe(false);
+    expect(body.nextQuestion?.toLowerCase()).toContain("ideal customer");
+  });
+
   it("falls back to deterministic output when model call times out", async () => {
     process.env.OPENAI_API_KEY = "test-key";
     vi.useFakeTimers();

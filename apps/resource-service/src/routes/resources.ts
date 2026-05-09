@@ -24,6 +24,20 @@ const startupQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional()
 });
 
+const createStartupBodySchema = z.object({
+  name: z.string().min(1).max(255),
+  website: z.string().url().max(2048).nullable().optional(),
+  employees: z.number().int().min(0).nullable().optional(),
+  sector: z.string().max(100).nullable().optional(),
+  yearFounded: z.number().int().min(1800).max(new Date().getFullYear() + 1).nullable().optional(),
+  description: z.string().max(10000).nullable().optional(),
+  address: z.string().max(500).nullable().optional(),
+  stage: z.string().max(50).nullable().optional(),
+  dateFounded: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  phone: z.string().max(30).nullable().optional(),
+  onboardingContext: z.record(z.unknown()).optional()
+});
+
 const searchBodySchema = z
   .object({
     category: z.enum(RESOURCE_CATEGORIES).optional(),
@@ -49,6 +63,22 @@ export async function resourceRoutes(app: FastifyInstance, repository: ResourceR
 
     const startups = await repository.startups(parsed.data);
     return reply.send({ startups, count: startups.length });
+  });
+
+  app.post("/startups", async (request, reply) => {
+    const parsed = createStartupBodySchema.safeParse(request.body);
+
+    if (!parsed.success) {
+      return sendApiError(reply, "VALIDATION_ERROR", "Invalid startup profile data.", parsed.error.flatten());
+    }
+
+    try {
+      const startup = await repository.createStartup(parsed.data);
+      return reply.status(201).send(startup);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create startup profile.";
+      return sendApiError(reply, "INTERNAL_ERROR", message);
+    }
   });
 
   app.get("/resources", async (request, reply) => {

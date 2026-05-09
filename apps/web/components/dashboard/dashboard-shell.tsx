@@ -19,7 +19,8 @@ export function DashboardShell() {
   const { isLoading, isOnboarded, run } = useOnboardingGate();
   const [currentRun, setCurrentRun] = useState<FounderFlowResponse | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
-  const [showPins, setShowPins] = useState(true);
+  const [showStartupPins, setShowStartupPins] = useState(true);
+  const [showResourcePins, setShowResourcePins] = useState(true);
   const [selectedStartupId, setSelectedStartupId] = useState<string | null>(null);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<MapFilters | null>(null);
@@ -61,8 +62,10 @@ export function DashboardShell() {
           saveDashboardRun(mergedRun);
           return mergedRun;
         });
-      } catch {
-        // Startup hydration is a best-effort fallback for older session payloads.
+      } catch (hydrateError) {
+        // Surface the error so the retry UI is shown in DashboardControls.
+        const message = hydrateError instanceof Error ? hydrateError.message : "Failed to load startup profiles.";
+        setRetryError((existing) => existing ?? message);
       }
     };
 
@@ -150,14 +153,14 @@ export function DashboardShell() {
     setSelectedStartupId(startupId);
     setSelectedResourceId(null);
     setActiveTab("startups");
-    setShowPins(true);
+    setShowStartupPins(true);
   }
 
   function handleResourceSelect(resourceId: string) {
     setSelectedResourceId(resourceId);
     setSelectedStartupId(null);
     setActiveTab("resources");
-    setShowPins(true);
+    setShowResourcePins(true);
   }
 
   function handlePinSelect(pin: { id: string; kind: "startup" | "resource" }) {
@@ -186,7 +189,8 @@ export function DashboardShell() {
     <div className="relative h-full w-full overflow-hidden">
       {/* Map fills the entire background */}
       <FounderMap
-        showPins={showPins}
+        showStartupPins={showStartupPins}
+        showResourcePins={showResourcePins}
         className="absolute inset-0 h-full w-full rounded-none"
         resources={resources}
         startups={startups}
@@ -245,8 +249,10 @@ export function DashboardShell() {
               isRetrying={isRetrying}
               retryError={retryError}
               onRetry={retryRun}
-              showPins={showPins}
-              onTogglePins={() => setShowPins((v) => !v)}
+              showStartupPins={showStartupPins}
+              showResourcePins={showResourcePins}
+              onToggleStartupPins={() => setShowStartupPins((value) => !value)}
+              onToggleResourcePins={() => setShowResourcePins((value) => !value)}
               selectedStartupId={selectedStartupId}
               selectedResourceId={selectedResourceId}
               onStartupSelect={handleStartupSelect}

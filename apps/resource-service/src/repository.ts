@@ -4,13 +4,15 @@ import type {
   ResourceCategory,
   ResourceFeatureCollection,
   StartupProfile,
-  StartupResource
+  StartupResource,
+  CreateStartupProfileInput
 } from "@founder-gps/shared-types";
 import type { ResourceFilters, StartupFilters } from "./types.js";
 
 export interface ResourceRepository {
   list(filters: ResourceFilters): Promise<StartupResource[]>;
   startups(filters: StartupFilters): Promise<StartupProfile[]>;
+  createStartup(input: CreateStartupProfileInput): Promise<StartupProfile>;
   getById(id: string): Promise<StartupResource | null>;
   mapData(filters: ResourceFilters): Promise<ResourceFeatureCollection>;
   categories(): Promise<ResourceCategory[]>;
@@ -70,6 +72,10 @@ function toStartupProfile(row: QueryResultRow): StartupProfile {
     photoGallery: Array.isArray(row.photo_gallery) ? row.photo_gallery : [],
     lat: typeof row.lat === "number" ? row.lat : row.lat === null ? null : Number(row.lat),
     lng: typeof row.lng === "number" ? row.lng : row.lng === null ? null : Number(row.lng),
+    stage: row.stage ?? null,
+    dateFounded: row.date_founded ? (row.date_founded instanceof Date ? row.date_founded.toISOString().slice(0, 10) : String(row.date_founded)) : null,
+    phone: row.phone ?? null,
+    onboardingContext: row.onboarding_context ?? {},
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString()
   };
@@ -259,7 +265,8 @@ export class PgResourceRepository implements ResourceRepository {
       SELECT
         id, name, website, logo_url, employees, sector, year_founded, linkedin,
         description, address, hiring_status, job_postings, photo_gallery,
-        lat, lng, created_at, updated_at
+        lat, lng, stage, date_founded, phone, onboarding_context,
+        created_at, updated_at
       FROM startup_profiles
       ${whereClause}
       ORDER BY name ASC
@@ -269,6 +276,54 @@ export class PgResourceRepository implements ResourceRepository {
     );
 
     return result.rows.map(toStartupProfile);
+  }
+
+  async createStartup(input: CreateStartupProfileInput): Promise<StartupProfile> {
+    const yearFounded = input.yearFounded
+      ?? (input.dateFounded ? new Date(input.dateFounded).getFullYear() : null);
+
+    const result = await this.pool.query(
+      `
+      INSERT INTO startup_profiles
+        (name, website, employees, sector, year_founded, description, address,
+         stage, date_founded, phone, onboarding_context)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8,
+         $9::date, $10,
+         $11::jsonb)
+      ON CONFLICT (name, website) DO UPDATE SET
+        employees     = EXCLUDED.employees,
+        sector        = EXCLUDED.sector,
+        year_founded  = EXCLUDED.year_founded,
+        description   = EXCLUDED.description,
+        address       = EXCLUDED.address,
+        stage         = EXCLUDED.stage,
+        date_founded  = EXCLUDED.date_founded,
+        phone         = EXCLUDED.phone,
+        onboarding_context = EXCLUDED.onboarding_context,
+        updated_at    = NOW()
+      RETURNING
+        id, name, website, logo_url, employees, sector, year_founded, linkedin,
+        description, address, hiring_status, job_postings, photo_gallery,
+        lat, lng, stage, date_founded, phone, onboarding_context,
+        created_at, updated_at
+      `,
+      [
+        input.name,
+        input.website ?? null,
+        input.employees ?? null,
+        input.sector ?? null,
+        yearFounded,
+        input.description ?? null,
+        input.address ?? null,
+        input.stage ?? null,
+        input.dateFounded ?? null,
+        input.phone ?? null,
+        JSON.stringify(input.onboardingContext ?? {})
+      ]
+    );
+
+    return toStartupProfile(result.rows[0]);
   }
 
   async getById(id: string): Promise<StartupResource | null> {

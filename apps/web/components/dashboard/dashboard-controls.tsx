@@ -39,8 +39,10 @@ type DashboardControlsProps = {
   isRetrying: boolean;
   retryError: string | null;
   onRetry: () => void;
-  showPins: boolean;
-  onTogglePins: () => void;
+  showStartupPins: boolean;
+  showResourcePins: boolean;
+  onToggleStartupPins: () => void;
+  onToggleResourcePins: () => void;
   selectedStartupId?: string | null;
   selectedResourceId?: string | null;
   onStartupSelect?: (startupId: string) => void;
@@ -128,8 +130,10 @@ export function DashboardControls({
   isRetrying,
   retryError,
   onRetry,
-  showPins,
-  onTogglePins,
+  showStartupPins,
+  showResourcePins,
+  onToggleStartupPins,
+  onToggleResourcePins,
   selectedStartupId = null,
   selectedResourceId = null,
   onStartupSelect,
@@ -606,6 +610,16 @@ export function DashboardControls({
                     </div>
                   ) : null}
 
+                  <div className="mb-3 rounded-2xl border border-border/70 bg-muted/35 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">Show startup pins</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Toggle startup pins on the map</p>
+                      </div>
+                      <Switch checked={showStartupPins} onCheckedChange={() => onToggleStartupPins()} />
+                    </div>
+                  </div>
+
                   {displayedStartups.length > 0 ? (
                     <div className="space-y-2">
                       {displayedStartups.map((startup) => {
@@ -859,7 +873,7 @@ export function DashboardControls({
               >
                 <div className="mb-2 flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-primary" />
-                  <h4 className="font-semibold">Map resources</h4>
+                  <h4 className="font-semibold">Founder resources</h4>
                 </div>
 
                 <div className="mb-3 rounded-xl border border-border/70 bg-background/40 p-2.5">
@@ -973,7 +987,7 @@ export function DashboardControls({
                       <p className="text-sm font-semibold">Show resource pins</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">Toggle pins on the map</p>
                     </div>
-                    <Switch checked={showPins} onCheckedChange={() => onTogglePins()} />
+                    <Switch checked={showResourcePins} onCheckedChange={() => onToggleResourcePins()} />
                   </div>
                 </div>
 

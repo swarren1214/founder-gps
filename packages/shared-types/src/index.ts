@@ -59,6 +59,33 @@ export interface StartupResource {
   updatedAt: string;
 }
 
+export interface StartupOnboardingInterviewTurn {
+  question: string;
+  answer: string;
+  answeredAt: string;
+}
+
+export interface StartupOnboardingContext {
+  schemaVersion: number;
+  identity?: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+  };
+  company?: {
+    companyName?: string;
+    companySize?: string;
+    dateFounded?: string;
+    website?: string;
+    address?: string;
+  };
+  details?: {
+    stage?: string;
+    description?: string;
+  };
+  interview?: StartupOnboardingInterviewTurn[];
+}
+
 export interface StartupProfile {
   id: string;
   name: string;
@@ -75,8 +102,30 @@ export interface StartupProfile {
   photoGallery: unknown[];
   lat: number | null;
   lng: number | null;
+  /** Funding/growth stage from founder intake (e.g. pre-revenue, seed, series-a). */
+  stage: string | null;
+  /** Full date the company was founded. */
+  dateFounded: string | null;
+  /** Primary contact phone number. */
+  phone: string | null;
+  /** Full structured intake data captured during onboarding. */
+  onboardingContext: StartupOnboardingContext;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateStartupProfileInput {
+  name: string;
+  website?: string | null;
+  employees?: number | null;
+  sector?: string | null;
+  yearFounded?: number | null;
+  description?: string | null;
+  address?: string | null;
+  stage?: string | null;
+  dateFounded?: string | null;
+  phone?: string | null;
+  onboardingContext?: StartupOnboardingContext;
 }
 
 export interface ResourceFeature {

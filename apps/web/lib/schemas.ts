@@ -241,7 +241,8 @@ export const roadmapGenerateRequestSchema = z.object({
   founderProfile: founderIntakeSchema,
   analysis: founderAnalysisSchema,
   recommendations: z.array(recommendationSchema),
-  resources: z.array(startupResourceSchema)
+  resources: z.array(startupResourceSchema),
+  startups: z.array(startupProfileSchema).optional()
 });
 
 export const roadmapGenerateResponseSchema = z.object({

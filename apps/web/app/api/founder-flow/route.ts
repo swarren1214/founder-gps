@@ -230,9 +230,9 @@ export async function POST(request: Request) {
               id: startup.id,
               name: startup.name,
               sector: startup.sector,
-              city: startup.city,
+              city: startup.address ?? null,
               description: startup.description,
-              stageKeywords: startup.stageKeywords,
+              stageKeywords: startup.stage ? [startup.stage] : [],
               hiringStatus: startup.hiringStatus
             })),
             topN: founderProfile.topN

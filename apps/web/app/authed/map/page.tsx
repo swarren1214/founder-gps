@@ -52,7 +52,8 @@ export default function MapPage() {
         startups={run.startups}
         recommendations={run.recommendations}
         route={run.route}
-        showPins={true}
+        showStartupPins={true}
+        showResourcePins={true}
         founderLocation={{
           city: run.founderProfile.locationCity,
           lat: run.founderProfile.locationLat,
