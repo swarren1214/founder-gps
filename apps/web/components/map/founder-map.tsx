@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { MapControls } from "@/components/map/map-controls";
 import { cn } from "@/lib/utils";
 import type { FounderRoute, Recommendation, ResourceCardData, StartupProfileData, MapFilters } from "@/lib/schemas";
 
@@ -381,6 +382,10 @@ export function FounderMap({
   const [startupPins, setStartupPins] = useState<StartupPin[]>([]);
   const [mapRevision, setMapRevision] = useState(0);
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
+  const [isLocatingUser, setIsLocatingUser] = useState(false);
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [pulseTick, setPulseTick] = useState(0);
 
   const allPins = useMemo<MapPin[]>(
     () => {
@@ -517,6 +522,20 @@ export function FounderMap({
   );
 
   useEffect(() => {
+    if (!userLocation) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setPulseTick((value) => value + 1);
+    }, 100);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [userLocation]);
+
+  useEffect(() => {
     let cancelled = false;
 
     Promise.all(
@@ -619,8 +638,6 @@ export function FounderMap({
     overlayRef.current = overlay;
     map.addControl(overlay);
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-
     return () => {
       if (overlayRef.current) {
         map.removeControl(overlayRef.current);
@@ -670,6 +687,9 @@ export function FounderMap({
     }
 
     const routeCoordinates = route?.geojson.features[0]?.geometry.coordinates ?? [];
+    const pulseProgress = (pulseTick % 18) / 18;
+    const pulseRadius = 35 + pulseProgress * 115;
+    const pulseAlpha = Math.max(20, Math.round((1 - pulseProgress) * 125));
 
     overlay.setProps({
       layers: [
@@ -681,6 +701,32 @@ export function FounderMap({
           getRadius: 140,
           radiusUnits: "meters"
         }),
+        ...(userLocation
+          ? [
+              new ScatterplotLayer({
+                id: "user-location-pulse-layer",
+                data: [{ position: [userLocation.lng, userLocation.lat] as [number, number] }],
+                getPosition: (item: { position: [number, number] }) => item.position,
+                getFillColor: [59, 130, 246, pulseAlpha],
+                getRadius: pulseRadius,
+                radiusUnits: "meters",
+                pickable: false
+              }),
+              new ScatterplotLayer({
+                id: "user-location-dot-layer",
+                data: [{ position: [userLocation.lng, userLocation.lat] as [number, number] }],
+                getPosition: (item: { position: [number, number] }) => item.position,
+                getFillColor: [59, 130, 246, 255],
+                getLineColor: [255, 255, 255, 255],
+                lineWidthUnits: "pixels",
+                lineWidthMinPixels: 2,
+                stroked: true,
+                getRadius: 9,
+                radiusUnits: "meters",
+                pickable: false
+              })
+            ]
+          : []),
         ...(showPins
           ? [
               ...(clusteredPins.clusters.length > 0
@@ -832,15 +878,132 @@ export function FounderMap({
     clusteredPins,
     hoveredPinId,
     onPinSelect,
+    pulseTick,
     regularSinglePins,
     route,
     selectedSinglePins,
-    showPins
+    showPins,
+    userLocation
   ]);
+
+  function handleZoomIn() {
+    const map = instanceRef.current;
+    if (!map) {
+      return;
+    }
+
+    map.zoomTo(map.getZoom() + 1, { duration: 220 });
+  }
+
+  function handleZoomOut() {
+    const map = instanceRef.current;
+    if (!map) {
+      return;
+    }
+
+    map.zoomTo(map.getZoom() - 1, { duration: 220 });
+  }
+
+  function handleLocateCurrent() {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      return;
+    }
+
+    setIsLocatingUser(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+
+        setUserLocation(nextLocation);
+        const map = instanceRef.current;
+        if (map) {
+          map.flyTo({
+            center: [nextLocation.lng, nextLocation.lat],
+            zoom: Math.max(map.getZoom(), 13.8),
+            speed: 1,
+            curve: 1.1,
+            essential: true
+          });
+        }
+
+        setIsLocatingUser(false);
+      },
+      () => {
+        setIsLocatingUser(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    );
+  }
+
+  async function handleSearchLocation(query: string): Promise<boolean> {
+    const map = instanceRef.current;
+    if (!map) {
+      return false;
+    }
+
+    setIsSearchingLocation(true);
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,
+        {
+          headers: {
+            Accept: "application/json"
+          }
+        }
+      );
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const payload = (await response.json()) as Array<{ lat: string; lon: string }>;
+      const bestMatch = payload[0];
+      if (!bestMatch) {
+        return false;
+      }
+
+      const lat = Number(bestMatch.lat);
+      const lng = Number(bestMatch.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return false;
+      }
+
+      map.flyTo({
+        center: [lng, lat],
+        zoom: Math.max(map.getZoom(), 12.8),
+        speed: 1,
+        curve: 1.1,
+        essential: true
+      });
+
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setIsSearchingLocation(false);
+    }
+  }
 
   return (
     <div className="relative h-full w-full">
       <div ref={mapRef} className={cn("h-full w-full overflow-hidden", className)} />
+      <MapControls
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onLocate={handleLocateCurrent}
+        onSearch={handleSearchLocation}
+        isLocating={isLocatingUser}
+        isSearching={isSearchingLocation}
+      />
     </div>
   );
 }

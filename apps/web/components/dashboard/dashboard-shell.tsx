@@ -210,33 +210,33 @@ export function DashboardShell() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         {/* Top header tab container */}
         <motion.div
-          className="absolute left-4 top-4 z-20 w-[420px] overflow-hidden rounded-2xl border border-border/70 bg-card/88 p-3 shadow-2xl backdrop-blur-lg"
+          className="absolute left-4 top-4 z-20 w-[420px] overflow-hidden rounded-2xl border border-border/70 bg-card/88 p-2.5 shadow-2xl backdrop-blur-lg"
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
         >
-          <TabsList className="grid h-14 w-full grid-cols-4 rounded-xl bg-muted/80 p-1.5 text-muted-foreground">
+          <TabsList className="grid h-12 w-full grid-cols-4 rounded-xl bg-muted/80 p-1 text-muted-foreground">
             <TabsTrigger
               value="overview"
-              className="rounded-lg px-3 py-2 text-base font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              className="rounded-lg px-2.5 py-1.5 text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
               Overview
             </TabsTrigger>
             <TabsTrigger
               value="roadmap"
-              className="rounded-lg px-3 py-2 text-base font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              className="rounded-lg px-2.5 py-1.5 text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
               Roadmap
             </TabsTrigger>
             <TabsTrigger
               value="startups"
-              className="rounded-lg px-3 py-2 text-base font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              className="rounded-lg px-2.5 py-1.5 text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
               Startups
             </TabsTrigger>
             <TabsTrigger
               value="resources"
-              className="rounded-lg px-3 py-2 text-base font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              className="rounded-lg px-2.5 py-1.5 text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
               Resources
             </TabsTrigger>
@@ -245,7 +245,7 @@ export function DashboardShell() {
 
         {/* Content container below header */}
         <motion.div
-          className="absolute bottom-4 left-4 top-[106px] z-10 w-[420px] overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/10"
+          className="absolute bottom-4 left-4 top-[96px] z-10 w-[420px] overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/10"
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.25 }}
