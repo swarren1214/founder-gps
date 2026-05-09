@@ -7,6 +7,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Moon, Sun } from "lucide-react";
 import { useAuthUser } from "@/hooks/use-auth-user";
 
@@ -57,9 +65,30 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleLogout}>
-            Logout
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-10 rounded-full p-0">
+                <Avatar className="size-9 transition-transform hover:scale-105">
+                  <AvatarImage src={avatarUrl} alt={displayName} />
+                  <AvatarFallback className="bg-secondary/20 text-secondary">{fallbackInitials}</AvatarFallback>
+                </Avatar>
+                <span className="sr-only">Open user menu</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-foreground">{displayName}</span>
+                  <span className="text-xs text-muted-foreground">Account menu</span>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href={profileHref}>Profile</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={handleLogout}>Logout</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Theme Toggle */}
           <Button
@@ -76,13 +105,6 @@ export function Header() {
             )}
             <span className="sr-only">Toggle theme</span>
           </Button>
-
-          <Link href={profileHref} aria-label="Open profile">
-            <Avatar className="size-9 transition-transform hover:scale-105">
-              <AvatarImage src={avatarUrl} alt={displayName} />
-              <AvatarFallback className="bg-secondary/20 text-secondary">{fallbackInitials}</AvatarFallback>
-            </Avatar>
-          </Link>
         </div>
       </div>
     </header>
