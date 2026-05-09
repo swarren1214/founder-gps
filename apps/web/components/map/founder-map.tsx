@@ -280,7 +280,7 @@ function resolveLogoSource(
   return null;
 }
 
-function clusterPins(points: MapPin[], map: maplibregl.Map, radiusPx = 52): { clusters: PinCluster[]; singles: MapPin[] } {
+function clusterPins(points: MapPin[], map: maplibregl.Map, radiusPx = 36): { clusters: PinCluster[]; singles: MapPin[] } {
   if (points.length <= 1) {
     return { clusters: [], singles: points };
   }
@@ -487,8 +487,34 @@ export function FounderMap({
       return { clusters: [] as PinCluster[], singles: allPins };
     }
 
+    // At closer zoom levels, show individual pins instead of forcing cluster bubbles.
+    if (map.getZoom() >= 12) {
+      return { clusters: [] as PinCluster[], singles: allPins };
+    }
+
     return clusterPins(allPins, map);
   }, [allPins, mapRevision]);
+
+  const selectedPinIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (selectedStartupId) {
+      ids.add(selectedStartupId);
+    }
+    if (selectedResourceId) {
+      ids.add(selectedResourceId);
+    }
+    return ids;
+  }, [selectedStartupId, selectedResourceId]);
+
+  const regularSinglePins = useMemo(
+    () => clusteredPins.singles.filter((pin) => !selectedPinIds.has(pin.id)),
+    [clusteredPins.singles, selectedPinIds]
+  );
+
+  const selectedSinglePins = useMemo(
+    () => clusteredPins.singles.filter((pin) => selectedPinIds.has(pin.id)),
+    [clusteredPins.singles, selectedPinIds]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -577,7 +603,7 @@ export function FounderMap({
           return null;
         }
 
-        if (layer?.id === "all-pins-layer" && object && "name" in object) {
+        if ((layer?.id === "all-pins-layer" || layer?.id === "selected-pins-layer") && object && "name" in object) {
           return {
             text: (object as MapPin).name,
             style: {
@@ -689,7 +715,7 @@ export function FounderMap({
                           ],
                           {
                             padding: 90,
-                            maxZoom: 14,
+                            maxZoom: 16,
                             duration: 350
                           }
                         );
@@ -711,7 +737,46 @@ export function FounderMap({
                 : []),
               new IconLayer<MapPin>({
                 id: "all-pins-layer",
-                data: clusteredPins.singles,
+                data: regularSinglePins,
+                getPosition: (pin) => [pin.lng, pin.lat],
+                getIcon: (pin) => ({
+                  url: pin.pinIconUrl,
+                  // Canvas is drawn at 2x (retina): PIN_W*2 × PIN_H*2
+                  width: PIN_W * 2,
+                  height: PIN_H * 2,
+                  anchorX: PIN_W,
+                  anchorY: PIN_ANCHOR_Y * 2
+                }),
+                getSize: (pin) => (pin.id === hoveredPinId ? pin.size * 1.1 : pin.size),
+                sizeUnits: "pixels",
+                sizeScale: 1,
+                pickable: true,
+                autoHighlight: true,
+                highlightColor: [255, 255, 255, 56],
+                transitions: {
+                  getSize: 120
+                },
+                updateTriggers: {
+                  getSize: hoveredPinId
+                },
+                onHover: ({ object }) => {
+                  const hovered = object as MapPin | null;
+                  setHoveredPinId((prev) => {
+                    const next = hovered?.id ?? null;
+                    return prev === next ? prev : next;
+                  });
+                },
+                onClick: ({ object }) => {
+                  const selectedPin = object as MapPin | null;
+                  if (!selectedPin) {
+                    return;
+                  }
+                  onPinSelect?.({ id: selectedPin.id, kind: selectedPin.kind });
+                }
+              }),
+              new IconLayer<MapPin>({
+                id: "selected-pins-layer",
+                data: selectedSinglePins,
                 getPosition: (pin) => [pin.lng, pin.lat],
                 getIcon: (pin) => ({
                   url: pin.pinIconUrl,
@@ -767,7 +832,9 @@ export function FounderMap({
     clusteredPins,
     hoveredPinId,
     onPinSelect,
+    regularSinglePins,
     route,
+    selectedSinglePins,
     showPins
   ]);
 

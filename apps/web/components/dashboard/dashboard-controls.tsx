@@ -5,7 +5,7 @@ import { AlertTriangle, Building2, Compass, MapPin, RefreshCw, Route, Sparkles, 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent } from "@/components/ui/tabs";
 import type { FounderFlowResponse, MapFilters } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +21,6 @@ type DashboardControlsProps = {
   onStartupSelect?: (startupId: string) => void;
   onResourceSelect?: (resourceId: string) => void;
   activeTab?: string;
-  onTabChange?: (tab: string) => void;
   activeFilters?: MapFilters | null;
   onClearFilter?: () => void;
 };
@@ -109,7 +108,6 @@ export function DashboardControls({
   onStartupSelect,
   onResourceSelect,
   activeTab = "overview",
-  onTabChange,
   activeFilters = null,
   onClearFilter
 }: DashboardControlsProps) {
@@ -177,34 +175,6 @@ export function DashboardControls({
 
   return (
     <aside ref={containerRef} className="bg-card/75 backdrop-blur-lg p-5 h-full w-full overflow-y-scroll">
-      <Tabs value={activeTab} onValueChange={onTabChange} className="flex w-full flex-col gap-4">
-        <TabsList className="grid h-9 w-full grid-cols-4 rounded-lg bg-muted p-1 text-muted-foreground">
-          <TabsTrigger
-            value="overview"
-            className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            Overview
-          </TabsTrigger>
-          <TabsTrigger
-            value="roadmap"
-            className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            Roadmap
-          </TabsTrigger>
-          <TabsTrigger
-            value="startups"
-            className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            Startups
-          </TabsTrigger>
-          <TabsTrigger
-            value="resources"
-            className="rounded-md px-3 py-1 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            Resources
-          </TabsTrigger>
-        </TabsList>
-
         <TabsContent value="overview" className="space-y-4">
             <Card className="bg-[linear-gradient(135deg,rgba(0,33,66,0.96),rgba(67,167,157,0.62))] text-white">
               <Badge className="mb-4 border-white/20 bg-white/10 text-white">Founder dashboard</Badge>
@@ -484,7 +454,6 @@ export function DashboardControls({
             ))}
           </div>
         </TabsContent>
-      </Tabs>
 
     </aside>
   );
