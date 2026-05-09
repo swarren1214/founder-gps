@@ -1,6 +1,34 @@
 import { z } from "zod";
 import { FOUNDER_STAGES, RESOURCE_CATEGORIES } from "@founder-gps/shared-types";
 
+export const onboardingInterviewTurnSchema = z.object({
+  question: z.string(),
+  answer: z.string(),
+  answeredAt: z.string().optional()
+});
+
+export const onboardingContextSchema = z.object({
+  schemaVersion: z.number().int().min(1),
+  identity: z.record(z.unknown()).optional(),
+  security: z.record(z.unknown()).optional(),
+  company: z.record(z.unknown()).optional(),
+  details: z.record(z.unknown()).optional(),
+  interview: z.array(onboardingInterviewTurnSchema).default([])
+});
+
+export const onboardingInterviewRequestSchema = z.object({
+  turns: z.array(onboardingInterviewTurnSchema),
+  currentAnswer: z.string().optional(),
+  context: z.record(z.unknown()).optional()
+});
+
+export const onboardingInterviewResponseSchema = z.object({
+  assistantMessage: z.string(),
+  nextQuestion: z.string().nullable(),
+  completed: z.boolean(),
+  source: z.enum(["deterministic", "model"])
+});
+
 const startupResourceSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -176,6 +204,10 @@ export const mapFilterSchema = z.object({
   resourceCategories: z.array(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
   sectors: z.array(z.string()).optional(),
+  resourceStages: z.array(z.string()).optional(),
+  startupStageKeywords: z.array(z.string()).optional(),
+  employeeMin: z.number().int().positive().optional(),
+  employeeMax: z.number().int().positive().optional(),
   states: z.array(z.string()).optional(),
   clearFilters: z.boolean().optional()
 });
@@ -229,3 +261,7 @@ export type MapFilters = z.infer<typeof mapFilterSchema>;
 export type MapChatRequest = z.infer<typeof mapChatRequestSchema>;
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
 export type ChatResponse = z.infer<typeof chatResponseSchema>;
+export type OnboardingContext = z.infer<typeof onboardingContextSchema>;
+export type OnboardingInterviewTurn = z.infer<typeof onboardingInterviewTurnSchema>;
+export type OnboardingInterviewRequest = z.infer<typeof onboardingInterviewRequestSchema>;
+export type OnboardingInterviewResponse = z.infer<typeof onboardingInterviewResponseSchema>;

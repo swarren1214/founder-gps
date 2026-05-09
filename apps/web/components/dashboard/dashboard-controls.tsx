@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowLeft, Building2, Compass, ExternalLink, MapPin, Ref
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { filterResources, filterStartups } from "@/lib/map-filters";
 import { TabsContent } from "@/components/ui/tabs";
 import type { FounderFlowResponse, MapFilters } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
@@ -118,42 +119,8 @@ export function DashboardControls({
   const [logoLoadFailures, setLogoLoadFailures] = useState<Record<string, boolean>>({});
   const { founderProfile, analysis, recommendations, route, roadmap, startups, warnings } = run;
 
-  // Filter startups based on activeFilters
-  const filteredStartups = activeFilters && !activeFilters.clearFilters ? startups.filter((startup) => {
-    if (activeFilters.sectors && activeFilters.sectors.length > 0) {
-      const sectorMatch = activeFilters.sectors.some(
-        (sector) => startup.sector?.toLowerCase().includes(sector.toLowerCase())
-      );
-      if (!sectorMatch) return false;
-    }
-    if (activeFilters.keywords && activeFilters.keywords.length > 0) {
-      const keywordMatch = activeFilters.keywords.some(
-        (keyword) =>
-          startup.name.toLowerCase().includes(keyword.toLowerCase()) ||
-          startup.description?.toLowerCase().includes(keyword.toLowerCase())
-      );
-      if (!keywordMatch) return false;
-    }
-    return true;
-  }) : startups;
-
-  // Filter resources based on activeFilters
-  const filteredResources = activeFilters && !activeFilters.clearFilters ? run.resources.filter((resource) => {
-    if (activeFilters.resourceCategories && activeFilters.resourceCategories.length > 0) {
-      const categoryMatch = activeFilters.resourceCategories.includes(resource.category);
-      if (!categoryMatch) return false;
-    }
-    if (activeFilters.keywords && activeFilters.keywords.length > 0) {
-      const keywordMatch = activeFilters.keywords.some(
-        (keyword) =>
-          resource.name.toLowerCase().includes(keyword.toLowerCase()) ||
-          resource.description.toLowerCase().includes(keyword.toLowerCase()) ||
-          resource.tags.some((tag) => tag.toLowerCase().includes(keyword.toLowerCase()))
-      );
-      if (!keywordMatch) return false;
-    }
-    return true;
-  }) : run.resources;
+  const filteredStartups = filterStartups(startups, activeFilters);
+  const filteredResources = filterResources(run.resources, activeFilters);
   const selectedStartup = selectedStartupId ? startups.find((startup) => startup.id === selectedStartupId) ?? null : null;
 
   useEffect(() => {

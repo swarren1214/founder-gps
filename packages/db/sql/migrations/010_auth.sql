@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   location_city TEXT,
   avatar_url TEXT,
   avatar_storage_key TEXT,
+  onboarding_context_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   onboarding_status TEXT NOT NULL DEFAULT 'not_started'
     CHECK (onboarding_status IN ('not_started', 'in_progress', 'completed')),
   onboarding_completed_at TIMESTAMPTZ,
@@ -33,6 +34,9 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 
 CREATE INDEX IF NOT EXISTS idx_user_profiles_onboarding_status
   ON user_profiles (onboarding_status);
+
+ALTER TABLE user_profiles
+  ADD COLUMN IF NOT EXISTS onboarding_context_json JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS auth_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -19,6 +19,12 @@ export const UpdateProfileRequestSchema = z.object({
   roleTitle: z.string().min(1).max(120).nullable().optional(),
   bio: z.string().min(1).max(2000).nullable().optional(),
   locationCity: z.string().min(1).max(120).nullable().optional(),
+  onboardingContext: z
+    .object({
+      schemaVersion: z.number().int().min(1)
+    })
+    .catchall(z.unknown())
+    .optional(),
   onboardingStatus: z.enum(["not_started", "in_progress", "completed"]).optional()
 });
 
@@ -32,6 +38,7 @@ export const UserProfileSchema = z.object({
   roleTitle: z.string().nullable(),
   bio: z.string().nullable(),
   locationCity: z.string().nullable(),
+  onboardingContext: z.record(z.unknown()),
   avatarUrl: z.string().nullable(),
   avatarStorageKey: z.string().nullable(),
   onboardingStatus: z.enum(["not_started", "in_progress", "completed"]),

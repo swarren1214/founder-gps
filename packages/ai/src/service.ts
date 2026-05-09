@@ -236,12 +236,18 @@ class HeuristicProvider implements AiProvider {
     } else if (options.task === "map-chat") {
       const input = options.userPayload as MapChatInput;
       const queryLower = input.query.toLowerCase();
+      const employeeBetweenMatch = queryLower.match(/between\s+(\d+)\s+and\s+(\d+)\s+employees?/i);
+      const employeeMoreThanMatch = queryLower.match(/(?:more than|over|greater than)\s+(\d+)\s+employees?/i);
+      const employeeAtLeastMatch = queryLower.match(/(?:at least|minimum of)\s+(\d+)\s+employees?/i);
+      const employeeLessThanMatch = queryLower.match(/(?:less than|under|fewer than)\s+(\d+)\s+employees?/i);
+      const employeeAtMostMatch = queryLower.match(/(?:at most|no more than)\s+(\d+)\s+employees?/i);
       const isFilterRequest =
         queryLower.includes("show") ||
         queryLower.includes("find") ||
         queryLower.includes("funding") ||
         queryLower.includes("mentor") ||
-        queryLower.includes("resource");
+        queryLower.includes("resource") ||
+        queryLower.includes("startup");
       const isClearRequest = queryLower.includes("clear") || queryLower.includes("all") || queryLower.includes("reset");
 
       if (isClearRequest) {
@@ -257,6 +263,50 @@ class HeuristicProvider implements AiProvider {
         const isUtah = queryLower.includes("utah");
         const isSoftware =
           queryLower.includes("software") || queryLower.includes("saas") || queryLower.includes("tech");
+
+        const stageKeywords: string[] = [];
+        const hasPreSeed = /\bpre[-\s]?seed\b/i.test(queryLower);
+        if (hasPreSeed) stageKeywords.push("pre-seed");
+        if (!hasPreSeed && /\bseed\b/i.test(queryLower)) stageKeywords.push("seed");
+        if (/\bseries\s*a\b/i.test(queryLower)) stageKeywords.push("series a");
+        if (/\bseries\s*b\b/i.test(queryLower)) stageKeywords.push("series b");
+        if (/\bseries\s*c\b/i.test(queryLower)) stageKeywords.push("series c");
+        if (/\bgrowth\b/i.test(queryLower)) stageKeywords.push("growth");
+
+        let employeeMin: number | undefined;
+        let employeeMax: number | undefined;
+        if (employeeBetweenMatch) {
+          const first = Number(employeeBetweenMatch[1]);
+          const second = Number(employeeBetweenMatch[2]);
+          if (Number.isFinite(first) && Number.isFinite(second)) {
+            employeeMin = Math.min(first, second);
+            employeeMax = Math.max(first, second);
+          }
+        }
+        if (employeeMoreThanMatch) {
+          const value = Number(employeeMoreThanMatch[1]);
+          if (Number.isFinite(value)) {
+            employeeMin = value + 1;
+          }
+        }
+        if (employeeAtLeastMatch) {
+          const value = Number(employeeAtLeastMatch[1]);
+          if (Number.isFinite(value)) {
+            employeeMin = value;
+          }
+        }
+        if (employeeLessThanMatch) {
+          const value = Number(employeeLessThanMatch[1]);
+          if (Number.isFinite(value)) {
+            employeeMax = Math.max(1, value - 1);
+          }
+        }
+        if (employeeAtMostMatch) {
+          const value = Number(employeeAtMostMatch[1]);
+          if (Number.isFinite(value)) {
+            employeeMax = value;
+          }
+        }
 
         const matchedCategories = input.availableCategories.filter((cat) => {
           const catLower = cat.toLowerCase();
@@ -276,13 +326,34 @@ class HeuristicProvider implements AiProvider {
         if (isMentor) keywords.push("mentor", "advisor");
         if (isSoftware) keywords.push("software", "saas");
 
+        const matchedStates = input.availableStates?.filter((state) => {
+          const normalized = state.toLowerCase();
+          return normalized === "ut" ? isUtah : queryLower.includes(normalized);
+        }) ?? (isUtah ? ["UT"] : []);
+
+        const hasStartupSpecificConstraints =
+          matchedSectors.length > 0 ||
+          stageKeywords.length > 0 ||
+          employeeMin !== undefined ||
+          employeeMax !== undefined;
+
+        const intent: MapFilter["intent"] = hasStartupSpecificConstraints
+          ? matchedCategories.length > 0
+            ? "filter_both"
+            : "filter_startups"
+          : "filter_resources";
+
         draft = {
           reply: `Filtering for ${matchedCategories.length > 0 ? "relevant funding and mentor resources" : "related resources"}.`,
-          intent: matchedSectors.length > 0 ? "filter_both" : "filter_resources",
-          tab: matchedSectors.length > 0 ? "startups" : "resources",
+          intent,
+          tab: hasStartupSpecificConstraints ? "startups" : "resources",
           resourceCategories: matchedCategories.length > 0 ? matchedCategories : undefined,
           keywords: keywords.length > 0 ? keywords : undefined,
-          sectors: matchedSectors.length > 0 ? matchedSectors : undefined
+          sectors: matchedSectors.length > 0 ? matchedSectors : undefined,
+          states: matchedStates.length > 0 ? matchedStates : undefined,
+          startupStageKeywords: stageKeywords.length > 0 ? stageKeywords : undefined,
+          employeeMin,
+          employeeMax
         };
       } else {
         draft = {

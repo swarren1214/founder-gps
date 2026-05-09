@@ -64,7 +64,9 @@ export const MapChatInputSchema = z.object({
   query: z.string().min(1),
   founderSummary: z.string().min(1),
   availableCategories: z.array(z.string()),
-  availableSectors: z.array(z.string())
+  availableSectors: z.array(z.string()),
+  availableStates: z.array(z.string()).optional(),
+  availableEmployeeRanges: z.array(z.string()).optional()
 });
 
 export const MapFilterSchema = z.object({
@@ -74,6 +76,10 @@ export const MapFilterSchema = z.object({
   resourceCategories: z.array(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
   sectors: z.array(z.string()).optional(),
+  resourceStages: z.array(z.string()).optional(),
+  startupStageKeywords: z.array(z.string()).optional(),
+  employeeMin: z.number().int().positive().optional(),
+  employeeMax: z.number().int().positive().optional(),
   states: z.array(z.string()).optional(),
   clearFilters: z.boolean().optional()
 });

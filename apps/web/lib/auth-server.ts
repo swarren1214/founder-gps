@@ -16,9 +16,19 @@ export type AuthenticatedUser = {
     id: string;
     userId: string;
     displayName: string;
+    firstName: string | null;
+    lastName: string | null;
+    companyName: string | null;
+    roleTitle: string | null;
+    bio: string | null;
+    locationCity: string | null;
+    onboardingContext: Record<string, unknown>;
     avatarUrl: string | null;
+    avatarStorageKey: string | null;
     onboardingStatus: "not_started" | "in_progress" | "completed";
     onboardingCompletedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
   };
 };
 

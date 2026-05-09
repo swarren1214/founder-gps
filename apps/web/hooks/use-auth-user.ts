@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+export type OnboardingContextPayload = Record<string, unknown>;
+
 export type AuthUserPayload = {
   user: {
     id: string;
@@ -20,6 +22,7 @@ export type AuthUserPayload = {
     roleTitle: string | null;
     bio: string | null;
     locationCity: string | null;
+    onboardingContext: OnboardingContextPayload;
     avatarUrl: string | null;
     avatarStorageKey: string | null;
     onboardingStatus: "not_started" | "in_progress" | "completed";

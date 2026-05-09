@@ -1,6 +1,40 @@
 import type { Pool, PoolClient } from "pg";
 import type { UpdateProfileRequest } from "./types.js";
 
+function isSensitiveContextKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  if (normalized === "password" || normalized === "confirmpassword" || normalized === "passphrase") {
+    return true;
+  }
+
+  if (normalized.includes("secret") || normalized.includes("token")) {
+    return true;
+  }
+
+  return false;
+}
+
+function sanitizeOnboardingContext(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeOnboardingContext(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+    if (isSensitiveContextKey(key)) {
+      continue;
+    }
+
+    sanitized[key] = sanitizeOnboardingContext(nestedValue);
+  }
+
+  return sanitized;
+}
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -20,6 +54,7 @@ export type UserProfile = {
   roleTitle: string | null;
   bio: string | null;
   locationCity: string | null;
+  onboardingContext: Record<string, unknown>;
   avatarUrl: string | null;
   avatarStorageKey: string | null;
   onboardingStatus: "not_started" | "in_progress" | "completed";
@@ -60,6 +95,10 @@ function toUserProfile(row: Record<string, unknown>): UserProfile {
     roleTitle: row.role_title ? String(row.role_title) : null,
     bio: row.bio ? String(row.bio) : null,
     locationCity: row.location_city ? String(row.location_city) : null,
+    onboardingContext:
+      row.onboarding_context_json && typeof row.onboarding_context_json === "object"
+        ? (row.onboarding_context_json as Record<string, unknown>)
+        : {},
     avatarUrl: row.avatar_url ? String(row.avatar_url) : null,
     avatarStorageKey: row.avatar_storage_key ? String(row.avatar_storage_key) : null,
     onboardingStatus: String(row.onboarding_status) as UserProfile["onboardingStatus"],
@@ -138,6 +177,7 @@ export class PgAuthRepository implements AuthRepository {
             role_title,
             bio,
             location_city,
+            onboarding_context_json,
             avatar_url,
             avatar_storage_key,
             onboarding_status,
@@ -207,6 +247,7 @@ export class PgAuthRepository implements AuthRepository {
           role_title,
           bio,
           location_city,
+          onboarding_context_json,
           avatar_url,
           avatar_storage_key,
           onboarding_status,
@@ -251,6 +292,7 @@ export class PgAuthRepository implements AuthRepository {
           role_title,
           bio,
           location_city,
+          onboarding_context_json,
           avatar_url,
           avatar_storage_key,
           onboarding_status,
@@ -284,6 +326,7 @@ export class PgAuthRepository implements AuthRepository {
           role_title,
           bio,
           location_city,
+          onboarding_context_json,
           avatar_url,
           avatar_storage_key,
           onboarding_status,
@@ -317,12 +360,17 @@ export class PgAuthRepository implements AuthRepository {
       ["roleTitle", "role_title"],
       ["bio", "bio"],
       ["locationCity", "location_city"],
+      ["onboardingContext", "onboarding_context_json"],
       ["onboardingStatus", "onboarding_status"]
     ];
 
     for (const [inputKey, column] of map) {
       if (inputKey in patch) {
-        values.push((patch as Record<string, unknown>)[inputKey as string]);
+        if (inputKey === "onboardingContext") {
+          values.push(sanitizeOnboardingContext((patch as Record<string, unknown>)[inputKey as string]));
+        } else {
+          values.push((patch as Record<string, unknown>)[inputKey as string]);
+        }
         updates.push(`${column} = $${values.length}`);
       }
     }
@@ -349,6 +397,7 @@ export class PgAuthRepository implements AuthRepository {
           role_title,
           bio,
           location_city,
+          onboarding_context_json,
           avatar_url,
           avatar_storage_key,
           onboarding_status,

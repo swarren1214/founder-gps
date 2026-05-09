@@ -37,6 +37,7 @@ class InMemoryAuthRepository implements AuthRepository {
       roleTitle: null,
       bio: null,
       locationCity: null,
+      onboardingContext: {},
       avatarUrl: null,
       avatarStorageKey: null,
       onboardingStatus: "not_started",
@@ -78,6 +79,10 @@ class InMemoryAuthRepository implements AuthRepository {
       roleTitle: patch.roleTitle === undefined ? record.profile.roleTitle : (patch.roleTitle as string | null),
       bio: patch.bio === undefined ? record.profile.bio : (patch.bio as string | null),
       locationCity: patch.locationCity === undefined ? record.profile.locationCity : (patch.locationCity as string | null),
+      onboardingContext:
+        patch.onboardingContext === undefined
+          ? record.profile.onboardingContext
+          : (patch.onboardingContext as Record<string, unknown>),
       onboardingStatus:
         (patch.onboardingStatus as UserProfile["onboardingStatus"] | undefined) ?? record.profile.onboardingStatus,
       onboardingCompletedAt:
@@ -770,6 +775,143 @@ describe("auth routes", () => {
       const profile = patchResponse.json().profile;
       expect(profile.displayName).toBe("Original Name");
       expect(profile.locationCity).toBe("Provo");
+      expect(profile.onboardingContext).toEqual({});
+    });
+
+    it("stores onboardingContext when provided", async () => {
+      const app = buildApp({
+        repository: new InMemoryAuthRepository(),
+        avatarStorage: new InMemoryAvatarStorage(),
+        cookieName: "fg_session",
+        sessionTtlDays: 14,
+        isProduction: false
+      });
+
+      const registerResponse = await app.inject({
+        method: "POST",
+        url: "/auth/register",
+        payload: { email: `context-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Context User" }
+      });
+      const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
+
+      const patchResponse = await app.inject({
+        method: "PATCH",
+        url: "/profile",
+        headers: { cookie: `fg_session=${token}`, "content-type": "application/json" },
+        payload: {
+          onboardingContext: {
+            schemaVersion: 1,
+            profile: {
+              companyName: "Acme Labs"
+            }
+          }
+        }
+      });
+
+      expect(patchResponse.statusCode).toBe(200);
+      const profile = patchResponse.json().profile;
+      expect(profile.onboardingContext).toEqual({
+        schemaVersion: 1,
+        profile: {
+          companyName: "Acme Labs"
+        }
+      });
+
+      const meResponse = await app.inject({
+        method: "GET",
+        url: "/auth/me",
+        headers: { cookie: `fg_session=${token}` }
+      });
+
+      expect(meResponse.statusCode).toBe(200);
+      const mePayload = meResponse.json();
+      expect(mePayload.profile.onboardingContext).toEqual({
+        schemaVersion: 1,
+        profile: {
+          companyName: "Acme Labs"
+        }
+      });
+    });
+
+    it("rejects onboardingContext when schemaVersion is missing", async () => {
+      const app = buildApp({
+        repository: new InMemoryAuthRepository(),
+        avatarStorage: new InMemoryAvatarStorage(),
+        cookieName: "fg_session",
+        sessionTtlDays: 14,
+        isProduction: false
+      });
+
+      const registerResponse = await app.inject({
+        method: "POST",
+        url: "/auth/register",
+        payload: { email: `invalid-context-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Invalid Context User" }
+      });
+      const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
+
+      const patchResponse = await app.inject({
+        method: "PATCH",
+        url: "/profile",
+        headers: { cookie: `fg_session=${token}`, "content-type": "application/json" },
+        payload: {
+          onboardingContext: {
+            interview: []
+          }
+        }
+      });
+
+      expect(patchResponse.statusCode).toBe(400);
+      const payload = patchResponse.json();
+      expect(payload.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("strips sensitive onboardingContext keys before storing profile", async () => {
+      const app = buildApp({
+        repository: new InMemoryAuthRepository(),
+        avatarStorage: new InMemoryAvatarStorage(),
+        cookieName: "fg_session",
+        sessionTtlDays: 14,
+        isProduction: false
+      });
+
+      const registerResponse = await app.inject({
+        method: "POST",
+        url: "/auth/register",
+        payload: { email: `secure-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Secure User" }
+      });
+      const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
+
+      const patchResponse = await app.inject({
+        method: "PATCH",
+        url: "/profile",
+        headers: { cookie: `fg_session=${token}`, "content-type": "application/json" },
+        payload: {
+          onboardingContext: {
+            schemaVersion: 1,
+            security: {
+              password: "dont-store-me",
+              confirmPassword: "dont-store-me",
+              passwordConfigured: true,
+              apiToken: "dont-store-me"
+            },
+            company: {
+              companyName: "Acme Labs"
+            }
+          }
+        }
+      });
+
+      expect(patchResponse.statusCode).toBe(200);
+      const profile = patchResponse.json().profile;
+      expect(profile.onboardingContext).toEqual({
+        schemaVersion: 1,
+        security: {
+          passwordConfigured: true
+        },
+        company: {
+          companyName: "Acme Labs"
+        }
+      });
     });
 
     it("sets onboardingCompletedAt when onboardingStatus is set to completed", async () => {

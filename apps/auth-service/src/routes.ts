@@ -9,7 +9,8 @@ import {
   AuthUserResponseSchema,
   LoginRequestSchema,
   RegisterRequestSchema,
-  UpdateProfileRequestSchema
+  UpdateProfileRequestSchema,
+  type UpdateProfileRequest
 } from "./types.js";
 
 type RouteOptions = {
@@ -21,6 +22,39 @@ type RouteOptions = {
 };
 
 const ALLOWED_AVATAR_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+function isSensitiveContextKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  if (normalized === "password" || normalized === "confirmpassword" || normalized === "passphrase") {
+    return true;
+  }
+
+  if (normalized.includes("secret") || normalized.includes("token")) {
+    return true;
+  }
+
+  return false;
+}
+
+function sanitizeOnboardingContext(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeOnboardingContext(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+    if (isSensitiveContextKey(key)) {
+      continue;
+    }
+
+    sanitized[key] = sanitizeOnboardingContext(nestedValue);
+  }
+
+  return sanitized;
+}
 
 function serializeSessionCookie(options: {
   name: string;
@@ -284,7 +318,18 @@ export async function authRoutes(app: FastifyInstance, options: RouteOptions) {
       return sendApiError(reply, "VALIDATION_ERROR", "Invalid profile update request.", parsed.error.flatten());
     }
 
-    const profile = await options.repository.updateProfile(identity.user.id, parsed.data);
+    const patch: UpdateProfileRequest =
+      parsed.data.onboardingContext === undefined
+        ? parsed.data
+        : {
+            ...parsed.data,
+            onboardingContext: {
+              ...(sanitizeOnboardingContext(parsed.data.onboardingContext) as Record<string, unknown>),
+              schemaVersion: parsed.data.onboardingContext.schemaVersion
+            }
+          };
+
+    const profile = await options.repository.updateProfile(identity.user.id, patch);
     return reply.send({ user: identity.user, profile });
   });
 

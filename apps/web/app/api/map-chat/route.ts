@@ -12,6 +12,8 @@ type MapChatRequest = {
     };
   availableCategories: string[];
   availableSectors: string[];
+  availableStates?: string[];
+  availableEmployeeRanges?: string[];
 };
 
 export async function POST(request: NextRequest) {
@@ -57,7 +59,9 @@ export async function POST(request: NextRequest) {
         query: body.query,
         founderSummary,
         availableCategories: body.availableCategories,
-        availableSectors: body.availableSectors
+        availableSectors: body.availableSectors,
+        availableStates: body.availableStates ?? [],
+        availableEmployeeRanges: body.availableEmployeeRanges ?? []
       })
     });
 
@@ -82,6 +86,10 @@ export async function POST(request: NextRequest) {
         resourceCategories?: string[];
         keywords?: string[];
         sectors?: string[];
+        resourceStages?: string[];
+        startupStageKeywords?: string[];
+        employeeMin?: number;
+        employeeMax?: number;
         states?: string[];
         clearFilters?: boolean;
       };
@@ -96,6 +104,10 @@ export async function POST(request: NextRequest) {
         resourceCategories: data.filters.resourceCategories,
         keywords: data.filters.keywords,
         sectors: data.filters.sectors,
+        resourceStages: data.filters.resourceStages,
+        startupStageKeywords: data.filters.startupStageKeywords,
+        employeeMin: data.filters.employeeMin,
+        employeeMax: data.filters.employeeMax,
         states: data.filters.states,
         clearFilters: data.filters.clearFilters
       }

@@ -60,7 +60,9 @@ export function mapChatPrompt() {
     "Analyze the user query. Respond with JSON only (no markdown or prose outside JSON).",
     "Determine intent: 'filter_resources', 'filter_startups', 'filter_both', 'clear', or 'general'.",
     "If filtering, pick the best matching 'tab': 'resources', 'startups', 'overview', or 'roadmap'.",
-    "Extract matching resourceCategories, keywords, sectors, and/or states from the query context.",
+    "Extract matching resourceCategories, keywords, sectors, states, employeeMin/employeeMax, and startupStageKeywords from the query context.",
+    "For startup stage phrases (seed, series A, series B, growth), include startupStageKeywords.",
+    "For employee requests ('more than 50 employees', 'between 11 and 50'), set employeeMin and/or employeeMax.",
     "If user asks to 'clear' or 'show all', set clearFilters=true.",
     "Provide a friendly, concise 'reply' explaining what was filtered (e.g., 'Found 5 Utah funding resources for startups').",
     "Return JSON matching MapFilterSchema exactly."
