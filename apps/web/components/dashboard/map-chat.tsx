@@ -114,6 +114,36 @@ function extractStartupStageKeywords(query: string): string[] {
   return Array.from(keywords);
 }
 
+function normalizeIntentFromQuery(query: string, filters: MapFilters): MapFilters {
+  const queryLower = query.toLowerCase();
+  const asksStartups = /\bstartups?\b/.test(queryLower);
+  const asksResources = /\bresources?\b/.test(queryLower);
+
+  if (asksStartups && !asksResources) {
+    return {
+      ...filters,
+      intent: "filter_startups",
+      tab: "startups",
+      resourceCategories: undefined,
+      resourceStages: undefined
+    };
+  }
+
+  if (asksResources && !asksStartups) {
+    return {
+      ...filters,
+      intent: "filter_resources",
+      tab: "resources",
+      sectors: undefined,
+      startupStageKeywords: undefined,
+      employeeMin: undefined,
+      employeeMax: undefined
+    };
+  }
+
+  return filters;
+}
+
 function buildCountMessage(filters: MapFilters, resourceCount: number, startupCount: number): string | null {
   if (filters.clearFilters || filters.intent === "clear") {
     return null;
@@ -231,12 +261,13 @@ export function MapChat({
               )
             }
           : filtersWithStateBounds;
+      const normalizedFilters = finalFilters ? normalizeIntentFromQuery(userMessage.content, finalFilters) : undefined;
       let reply = data.reply as string;
 
-      if (finalFilters) {
-        const resourceCount = filterResources(resources, finalFilters).length;
-        const startupCount = filterStartups(startups, finalFilters).length;
-        const countMessage = buildCountMessage(finalFilters, resourceCount, startupCount);
+      if (normalizedFilters) {
+        const resourceCount = filterResources(resources, normalizedFilters).length;
+        const startupCount = filterStartups(startups, normalizedFilters).length;
+        const countMessage = buildCountMessage(normalizedFilters, resourceCount, startupCount);
         if (countMessage) {
           reply = countMessage;
         }
@@ -250,9 +281,9 @@ export function MapChat({
 
       setMessages((prev) => [...prev, assistantMessage]);
 
-      if (finalFilters) {
-        setActiveFilters(finalFilters);
-        onFilter(finalFilters);
+      if (normalizedFilters) {
+        setActiveFilters(normalizedFilters);
+        onFilter(normalizedFilters);
       }
     } catch (error) {
       console.error("Map chat error:", error);

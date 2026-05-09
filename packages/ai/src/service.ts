@@ -312,8 +312,8 @@ class HeuristicProvider implements AiProvider {
           const catLower = cat.toLowerCase();
           return (isFunding && catLower.includes("fund")) ||
             (isMentor && catLower.includes("mentor")) ||
-            catLower.includes("accelerator") ||
-            catLower.includes("investor");
+            (isFunding && catLower.includes("accelerator")) ||
+            (isFunding && catLower.includes("investor"));
         });
 
         const matchedSectors = input.availableSectors.filter((sec) => {
