@@ -6,13 +6,28 @@ const startupResourceSchema = z.object({
   name: z.string(),
   category: z.enum(RESOURCE_CATEGORIES),
   description: z.string(),
+  sourceExternalId: z.string().nullable().optional(),
   website: z.string().nullable(),
   logoUrl: z.string().nullable(),
+  contactEmail: z.string().nullable().optional(),
+  communities: z.array(z.string()).default([]),
   address: z.string().nullable(),
   city: z.string(),
   state: z.string(),
   lat: z.number(),
   lng: z.number(),
+  locations: z.array(
+    z.object({
+      id: z.string().uuid(),
+      locationName: z.string(),
+      address: z.string(),
+      city: z.string(),
+      state: z.string(),
+      lat: z.number(),
+      lng: z.number(),
+      isPrimary: z.boolean()
+    })
+  ).default([]),
   stageFit: z.array(z.enum(FOUNDER_STAGES)),
   industryFit: z.array(z.string()),
   tags: z.array(z.string()),

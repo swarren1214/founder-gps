@@ -1,5 +1,6 @@
 import { Pool, type QueryResultRow } from "pg";
 import type {
+  ResourceLocation,
   ResourceCategory,
   ResourceFeatureCollection,
   StartupProfile,
@@ -16,18 +17,34 @@ export interface ResourceRepository {
 }
 
 function toResource(row: QueryResultRow): StartupResource {
+  const rawLocations = Array.isArray(row.locations) ? row.locations : [];
+  const locations: ResourceLocation[] = rawLocations.map((location) => ({
+    id: location.id,
+    locationName: location.locationName,
+    address: location.address,
+    city: location.city,
+    state: location.state,
+    lat: Number(location.lat),
+    lng: Number(location.lng),
+    isPrimary: Boolean(location.isPrimary)
+  }));
+
   return {
     id: row.id,
     name: row.name,
     category: row.category,
     description: row.description,
+    sourceExternalId: row.source_external_id,
     website: row.website,
     logoUrl: row.logo_url,
+    contactEmail: row.contact_email,
+    communities: Array.isArray(row.communities) ? row.communities : [],
     address: row.address,
     city: row.city,
     state: row.state,
     lat: Number(row.lat),
     lng: Number(row.lng),
+    locations,
     stageFit: row.stage_fit,
     industryFit: row.industry_fit,
     tags: row.tags,
@@ -67,8 +84,14 @@ function buildFilters(filters: ResourceFilters, params: unknown[]): string[] {
   }
 
   if (filters.city) {
-    params.push(filters.city);
-    where.push(`city ILIKE $${params.length}`);
+    params.push(`%${filters.city}%`);
+    const idx = params.length;
+    where.push(`EXISTS (
+      SELECT 1
+      FROM startup_resource_locations srl
+      WHERE srl.resource_id = sr.id
+        AND (srl.city ILIKE $${idx} OR srl.location_name ILIKE $${idx} OR srl.address ILIKE $${idx})
+    )`);
   }
 
   if (filters.stage) {
@@ -84,7 +107,18 @@ function buildFilters(filters: ResourceFilters, params: unknown[]): string[] {
   if (filters.q) {
     params.push(`%${filters.q}%`);
     const idx = params.length;
-    where.push(`(name ILIKE $${idx} OR description ILIKE $${idx} OR array_to_string(tags, ' ') ILIKE $${idx})`);
+    where.push(`(
+      sr.name ILIKE $${idx}
+      OR sr.description ILIKE $${idx}
+      OR array_to_string(sr.tags, ' ') ILIKE $${idx}
+      OR array_to_string(sr.communities, ' ') ILIKE $${idx}
+      OR EXISTS (
+        SELECT 1
+        FROM startup_resource_locations srl
+        WHERE srl.resource_id = sr.id
+          AND (srl.city ILIKE $${idx} OR srl.location_name ILIKE $${idx} OR srl.address ILIKE $${idx})
+      )
+    )`);
   }
 
   if (
@@ -99,7 +133,16 @@ function buildFilters(filters: ResourceFilters, params: unknown[]): string[] {
     params.push(filters.radiusMiles * 1609.34);
     const radiusIdx = params.length;
     where.push(
-      `ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint($${lngIdx}, $${latIdx}), 4326)::geography, $${radiusIdx})`
+      `EXISTS (
+        SELECT 1
+        FROM startup_resource_locations srl
+        WHERE srl.resource_id = sr.id
+          AND ST_DWithin(
+            srl.location::geography,
+            ST_SetSRID(ST_MakePoint($${lngIdx}, $${latIdx}), 4326)::geography,
+            $${radiusIdx}
+          )
+      )`
     );
   }
 
@@ -123,14 +166,63 @@ export class PgResourceRepository implements ResourceRepository {
     const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
 
     const query = `
+      WITH filtered_resources AS (
+        SELECT sr.id
+        FROM startup_resources sr
+        ${whereClause}
+        ORDER BY sr.name ASC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}
+      )
       SELECT
-        id, name, category, description, website, logo_url, address,
-        city, state, lat, lng, stage_fit, industry_fit, tags,
-        created_at, updated_at
-      FROM startup_resources
-      ${whereClause}
+        sr.id,
+        sr.name,
+        sr.category,
+        sr.description,
+        sr.source_external_id,
+        sr.website,
+        sr.logo_url,
+        sr.contact_email,
+        sr.communities,
+        COALESCE(primary_location.address, sr.address) AS address,
+        COALESCE(primary_location.city, sr.city) AS city,
+        COALESCE(primary_location.state, sr.state) AS state,
+        COALESCE(primary_location.lat, sr.lat) AS lat,
+        COALESCE(primary_location.lng, sr.lng) AS lng,
+        location_agg.locations,
+        sr.stage_fit,
+        sr.industry_fit,
+        sr.tags,
+        sr.created_at,
+        sr.updated_at
+      FROM filtered_resources fr
+      JOIN startup_resources sr ON sr.id = fr.id
+      LEFT JOIN LATERAL (
+        SELECT srl.address, srl.city, srl.state, srl.lat, srl.lng
+        FROM startup_resource_locations srl
+        WHERE srl.resource_id = sr.id AND srl.is_primary = TRUE
+        LIMIT 1
+      ) AS primary_location ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(
+          json_agg(
+            json_build_object(
+              'id', srl.id,
+              'locationName', srl.location_name,
+              'address', srl.address,
+              'city', srl.city,
+              'state', srl.state,
+              'lat', srl.lat,
+              'lng', srl.lng,
+              'isPrimary', srl.is_primary
+            )
+            ORDER BY srl.is_primary DESC, srl.location_name ASC
+          ),
+          '[]'::json
+        ) AS locations
+        FROM startup_resource_locations srl
+        WHERE srl.resource_id = sr.id
+      ) AS location_agg ON TRUE
       ORDER BY name ASC
-      LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
 
     const result = await this.pool.query(query, params);
@@ -183,11 +275,54 @@ export class PgResourceRepository implements ResourceRepository {
     const result = await this.pool.query(
       `
       SELECT
-        id, name, category, description, website, logo_url, address,
-        city, state, lat, lng, stage_fit, industry_fit, tags,
-        created_at, updated_at
-      FROM startup_resources
-      WHERE id = $1
+        sr.id,
+        sr.name,
+        sr.category,
+        sr.description,
+        sr.source_external_id,
+        sr.website,
+        sr.logo_url,
+        sr.contact_email,
+        sr.communities,
+        COALESCE(primary_location.address, sr.address) AS address,
+        COALESCE(primary_location.city, sr.city) AS city,
+        COALESCE(primary_location.state, sr.state) AS state,
+        COALESCE(primary_location.lat, sr.lat) AS lat,
+        COALESCE(primary_location.lng, sr.lng) AS lng,
+        location_agg.locations,
+        sr.stage_fit,
+        sr.industry_fit,
+        sr.tags,
+        sr.created_at,
+        sr.updated_at
+      FROM startup_resources sr
+      LEFT JOIN LATERAL (
+        SELECT srl.address, srl.city, srl.state, srl.lat, srl.lng
+        FROM startup_resource_locations srl
+        WHERE srl.resource_id = sr.id AND srl.is_primary = TRUE
+        LIMIT 1
+      ) AS primary_location ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(
+          json_agg(
+            json_build_object(
+              'id', srl.id,
+              'locationName', srl.location_name,
+              'address', srl.address,
+              'city', srl.city,
+              'state', srl.state,
+              'lat', srl.lat,
+              'lng', srl.lng,
+              'isPrimary', srl.is_primary
+            )
+            ORDER BY srl.is_primary DESC, srl.location_name ASC
+          ),
+          '[]'::json
+        ) AS locations
+        FROM startup_resource_locations srl
+        WHERE srl.resource_id = sr.id
+      ) AS location_agg ON TRUE
+      WHERE sr.id = $1
     `,
       [id]
     );

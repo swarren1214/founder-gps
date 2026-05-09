@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Building2, Compass, MapPin, RefreshCw, Route, Sparkles, Users } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertTriangle, ArrowLeft, Building2, Compass, ExternalLink, MapPin, RefreshCw, Route, Sparkles, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -19,6 +20,7 @@ type DashboardControlsProps = {
   selectedStartupId?: string | null;
   selectedResourceId?: string | null;
   onStartupSelect?: (startupId: string) => void;
+  onStartupClear?: () => void;
   onResourceSelect?: (resourceId: string) => void;
   activeTab?: string;
   activeFilters?: MapFilters | null;
@@ -106,6 +108,7 @@ export function DashboardControls({
   selectedStartupId = null,
   selectedResourceId = null,
   onStartupSelect,
+  onStartupClear,
   onResourceSelect,
   activeTab = "overview",
   activeFilters = null,
@@ -151,6 +154,7 @@ export function DashboardControls({
     }
     return true;
   }) : run.resources;
+  const selectedStartup = selectedStartupId ? startups.find((startup) => startup.id === selectedStartupId) ?? null : null;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -175,67 +179,81 @@ export function DashboardControls({
 
   return (
     <aside ref={containerRef} className="bg-card/75 backdrop-blur-lg p-5 h-full w-full overflow-y-scroll">
-        <TabsContent value="overview" className="space-y-4">
-            <Card className="bg-[linear-gradient(135deg,rgba(0,33,66,0.96),rgba(67,167,157,0.62))] text-white">
-              <Badge className="mb-4 border-white/20 bg-white/10 text-white">Founder dashboard</Badge>
-              <CardTitle className="text-white">{founderProfile.locationCity} founder readiness snapshot</CardTitle>
-              <CardDescription className="mt-3 text-white/80">{analysis.suggestedFocus}</CardDescription>
-              <div className="mt-5 grid grid-cols-3 gap-3">
-                <div className="rounded-2xl bg-white/10 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/65">Stage</p>
-                  <p className="mt-2 text-2xl font-semibold capitalize">{analysis.stage}</p>
-                </div>
-                <div className="rounded-2xl bg-white/10 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/65">Confidence</p>
-                  <p className="mt-2 text-2xl font-semibold">{Math.round(analysis.confidenceScore * 100)}%</p>
-                </div>
-                <div className="rounded-2xl bg-white/10 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/65">Top route</p>
-                  <p className="mt-2 text-2xl font-semibold">{route ? `${route.totalDriveTimeMinutes}m` : "Pending"}</p>
-                </div>
+        <TabsContent value="overview" className="space-y-5">
+          <Card className="overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_10%_10%,rgba(37,99,235,0.35),transparent_45%),linear-gradient(140deg,#062038,#0e4f63_55%,#1f7c75)] text-white shadow-xl">
+            <div className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <Badge className="border-white/25 bg-white/10 text-white">Founder cockpit</Badge>
+                <p className="text-[11px] uppercase tracking-[0.2em] text-white/70">{founderProfile.locationCity}</p>
               </div>
-            </Card>
+              <CardTitle className="mt-4 text-3xl leading-tight text-white">{founderProfile.locationCity} execution snapshot</CardTitle>
+              <CardDescription className="mt-3 max-w-[32ch] text-base text-white/85">{analysis.suggestedFocus}</CardDescription>
 
-            <div>
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mt-6 grid grid-cols-3 gap-3">
+                <div className="rounded-2xl border border-white/15 bg-black/15 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/65">Stage</p>
+                  <p className="mt-1 text-xl font-semibold capitalize text-white">{analysis.stage}</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-black/15 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/65">Confidence</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{Math.round(analysis.confidenceScore * 100)}%</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-black/15 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/65">Top route</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{route ? `${route.totalDriveTimeMinutes}m` : "Pending"}</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <section className="space-y-3 rounded-2xl border border-border/70 bg-background/45 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-secondary" />
-                <h4 className="font-semibold">Recommendations</h4>
+                <h4 className="text-base font-semibold">Priority recommendations</h4>
               </div>
-              <div className="space-y-3">
-                {recommendations.map((recommendation, index) => (
-                  <div key={recommendation.id} className="rounded-2xl border border-border/70 bg-muted/35 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Rank {index + 1}</p>
-                        <p className="mt-1 font-semibold">{recommendation.resourceName}</p>
-                      </div>
-                      <Badge className="bg-secondary/15 text-secondary">{recommendation.priority}</Badge>
+              <Badge className="bg-secondary/15 text-secondary">{recommendations.length} items</Badge>
+            </div>
+
+            <div className="space-y-2.5">
+              {recommendations.map((recommendation, index) => (
+                <article key={recommendation.id} className="rounded-xl border border-border/70 bg-muted/35 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">#{index + 1} recommendation</p>
+                      <p className="mt-1 text-base font-semibold">{recommendation.resourceName}</p>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">{recommendation.reason}</p>
+                    <Badge className="bg-secondary/15 text-secondary">{recommendation.priority}</Badge>
                   </div>
-                ))}
-              </div>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{recommendation.reason}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="space-y-3 rounded-2xl border border-border/70 bg-background/45 p-4">
+            <div className="flex items-center gap-2">
+              <Compass className="h-4 w-4 text-primary" />
+              <h4 className="text-base font-semibold">Needs and risk watchlist</h4>
             </div>
 
             <div>
-              <div className="mb-3 flex items-center gap-2">
-                <Compass className="h-4 w-4 text-primary" />
-                <h4 className="font-semibold">Needs and risks</h4>
-              </div>
               <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Primary needs</p>
-              <div className="mb-3 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
                 {analysis.primaryNeeds.map((need) => (
                   <Badge key={need}>{need.replaceAll("_", " ")}</Badge>
                 ))}
               </div>
-              <ul className="space-y-2">
-                {analysis.risks.map((risk) => (
-                  <li key={risk} className="rounded-xl border border-border/70 bg-muted/35 px-3 py-2 text-sm text-muted-foreground">
-                    {risk}
-                  </li>
-                ))}
-              </ul>
             </div>
+
+            <ul className="space-y-2">
+              {analysis.risks.map((risk) => (
+                <li key={risk} className="rounded-xl border border-border/70 bg-muted/35 px-3 py-2 text-sm text-muted-foreground">
+                  {risk}
+                </li>
+              ))}
+            </ul>
+          </section>
         </TabsContent>
 
         <TabsContent value="roadmap" className="space-y-3">
@@ -266,70 +284,54 @@ export function DashboardControls({
         </TabsContent>
 
         <TabsContent value="startups" className="space-y-3">
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-primary" />
-                <h4 className="font-semibold">Startup profiles</h4>
-              </div>
-
-              {activeFilters && !activeFilters.clearFilters ? (
-                <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
-                  <Badge className="bg-primary/20 text-primary text-xs">
-                    {filteredStartups.length} of {startups.length} matching
-                  </Badge>
-                  <button
-                    type="button"
-                    onClick={onClearFilter}
-                    className="ml-auto text-xs font-medium text-primary hover:underline"
-                  >
-                    Clear filter
-                  </button>
+          <AnimatePresence mode="wait" initial={false}>
+            {selectedStartup ? (
+              <motion.div
+                key={`startup-detail-${selectedStartup.id}`}
+                initial={{ opacity: 0, x: 28 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -28 }}
+                transition={{ duration: 0.22 }}
+                className="space-y-4"
+              >
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => onStartupClear?.()} className="-ml-2">
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </Button>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Startup profile</p>
                 </div>
-              ) : null}
 
-              {filteredStartups.length > 0 ? (
-                <div className="space-y-2">
-                  {filteredStartups.map((startup) => {
+                <div className="flex flex-row h-fit justify-between rounded-2xl border border-border/70 bg-muted/35 p-4">
+                  {(() => {
                     const startupLogoSource = resolveLogoSource(
-                      startup.logoUrl,
-                      startup.website,
-                      startup.updatedAt,
+                      selectedStartup.logoUrl,
+                      selectedStartup.website,
+                      selectedStartup.updatedAt,
                       true
                     );
                     const startupLogoSrc = startupLogoSource ?? undefined;
-                    const logoKey = `${startup.id}:${startup.updatedAt ?? ""}`;
+                    const logoKey = `${selectedStartup.id}:${selectedStartup.updatedAt ?? ""}`;
                     const showLogoImage = Boolean(startupLogoSrc) && !logoLoadFailures[logoKey];
 
                     return (
-                    <button
-                      key={startup.id}
-                      data-startup-id={startup.id}
-                      type="button"
-                      onClick={() => onStartupSelect?.(startup.id)}
-                      className={cn(
-                        "w-full rounded-2xl border px-3 py-2.5 text-left transition-colors",
-                        selectedStartupId === startup.id
-                          ? "border-primary/60 bg-primary/12 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.18)]"
-                          : "border-border/70 bg-muted/35 hover:border-primary/30 hover:bg-muted/55"
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="relative h-8 w-8 shrink-0">
+                      <div className="flex flex-row items-center h-fit w-full justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative h-11 w-11 shrink-0">
                             {!showLogoImage ? (
                               <div
-                                className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white"
-                                style={{ backgroundColor: getStartupAvatarColor(startup.name) }}
+                                className="flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-white"
+                                style={{ backgroundColor: getStartupAvatarColor(selectedStartup.name) }}
                                 aria-hidden="true"
                               >
-                                {getStartupInitial(startup.name)}
+                                {getStartupInitial(selectedStartup.name)}
                               </div>
                             ) : null}
                             {showLogoImage ? (
                               <img
                                 src={startupLogoSrc}
-                                alt={`${startup.name} logo`}
-                                className="absolute inset-0 h-8 w-8 rounded-full bg-background/70 object-contain"
+                                alt={`${selectedStartup.name} logo`}
+                                className="absolute inset-0 h-11 w-11 rounded-full bg-background/70 object-contain"
                                 loading="lazy"
                                 onLoad={() => {
                                   setLogoLoadFailures((previous) => {
@@ -349,51 +351,235 @@ export function DashboardControls({
                             ) : null}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-foreground">{startup.name}</p>
-                            <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                              {startup.sector ?? "Uncategorized"}
-                            </p>
+                            <h3 className="text-lg font-semibold text-foreground">{selectedStartup.name}</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">{selectedStartup.sector ?? "Uncategorized"}</p>
                           </div>
                         </div>
-                        {startup.employees ? (
+                        {selectedStartup.employees ? (
                           <Badge className="bg-secondary/15 text-secondary">
                             <Users className="mr-1 h-3 w-3" />
-                            {startup.employees}</Badge>
+                            {selectedStartup.employees}
+                          </Badge>
                         ) : null}
                       </div>
-                    </button>
                     );
-                  })}
+                  })()}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selectedStartup.yearFounded ? (
+                      <Badge className="border border-border/70 bg-background text-foreground">Founded {selectedStartup.yearFounded}</Badge>
+                    ) : null}
+                    {selectedStartup.hiringStatus ? (
+                      <Badge className="border border-border/70 bg-background text-foreground">{selectedStartup.hiringStatus}</Badge>
+                    ) : null}
+                  </div>
                 </div>
-              ) : (
-                <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">
-                  {activeFilters && !activeFilters.clearFilters ? "No startup profiles match the current filters." : "No startup profiles are available for this run."}
-                </div>
-              )}
-            </div>
 
-            {warnings.length > 0 || retryError ? (
-              <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3">
-                <div className="mb-2 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                  <p className="font-semibold text-destructive">Partial fallback state</p>
+                {selectedStartup.description ? (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Overview</p>
+                    <p className="mt-2 text-sm leading-6 text-foreground/90">{selectedStartup.description}</p>
+                  </div>
+                ) : null}
+
+                <div className="space-y-3">
+                  {selectedStartup.address ? (
+                    <div className="rounded-2xl border border-border/70 bg-muted/35 p-3">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="mt-0.5 h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Address</p>
+                          <p className="mt-1 text-sm text-foreground">{selectedStartup.address}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedStartup.website ? (
+                    <a
+                      href={selectedStartup.website}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-muted/55"
+                    >
+                      <div className="flex items-start gap-2">
+                        <Building2 className="mt-0.5 h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Website</p>
+                          <p className="mt-1 break-all">{selectedStartup.website}</p>
+                        </div>
+                      </div>
+                      <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </a>
+                  ) : null}
+
+                  {selectedStartup.linkedin ? (
+                    <a
+                      href={selectedStartup.linkedin}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-muted/55"
+                    >
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">LinkedIn</p>
+                        <p className="mt-1 break-all">{selectedStartup.linkedin}</p>
+                      </div>
+                      <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </a>
+                  ) : null}
                 </div>
-                <ul className="mb-3 space-y-1 text-sm text-foreground">
-                  {warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                  {retryError ? <li key="retry-error">{retryError}</li> : null}
-                </ul>
-                <Button variant="secondary" size="sm" onClick={onRetry} disabled={isRetrying}>
-                  <RefreshCw className={`h-4 w-4 ${isRetrying ? "animate-spin" : ""}`} />
-                  {isRetrying ? "Retrying" : "Retry services"}
-                </Button>
-              </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-border/70 bg-muted/35 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Job postings</p>
+                    <p className="mt-1 text-lg font-semibold text-foreground">{selectedStartup.jobPostings.length}</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/70 bg-muted/35 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Photo gallery</p>
+                    <p className="mt-1 text-lg font-semibold text-foreground">{selectedStartup.photoGallery.length}</p>
+                  </div>
+                </div>
+              </motion.div>
             ) : (
-              <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">
-                All services healthy. No active warnings.
-              </div>
+              <motion.div
+                key="startup-list"
+                initial={{ opacity: 0, x: -28 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 28 }}
+                transition={{ duration: 0.22 }}
+                className="space-y-3"
+              >
+                <div>
+                  <div className="mb-2 flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <h4 className="font-semibold">Startup profiles</h4>
+                  </div>
+
+                  {activeFilters && !activeFilters.clearFilters ? (
+                    <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
+                      <Badge className="bg-primary/20 text-primary text-xs">
+                        {filteredStartups.length} of {startups.length} matching
+                      </Badge>
+                      <button
+                        type="button"
+                        onClick={onClearFilter}
+                        className="ml-auto text-xs font-medium text-primary hover:underline"
+                      >
+                        Clear filter
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {filteredStartups.length > 0 ? (
+                    <div className="space-y-2">
+                      {filteredStartups.map((startup) => {
+                        const startupLogoSource = resolveLogoSource(
+                          startup.logoUrl,
+                          startup.website,
+                          startup.updatedAt,
+                          true
+                        );
+                        const startupLogoSrc = startupLogoSource ?? undefined;
+                        const logoKey = `${startup.id}:${startup.updatedAt ?? ""}`;
+                        const showLogoImage = Boolean(startupLogoSrc) && !logoLoadFailures[logoKey];
+
+                        return (
+                          <button
+                            key={startup.id}
+                            data-startup-id={startup.id}
+                            type="button"
+                            onClick={() => onStartupSelect?.(startup.id)}
+                            className={cn(
+                              "w-full rounded-2xl border px-3 py-2.5 text-left transition-colors",
+                              selectedStartupId === startup.id
+                                ? "border-primary/60 bg-primary/12 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.18)]"
+                                : "border-border/70 bg-muted/35 hover:border-primary/30 hover:bg-muted/55"
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="relative h-8 w-8 shrink-0">
+                                  {!showLogoImage ? (
+                                    <div
+                                      className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white"
+                                      style={{ backgroundColor: getStartupAvatarColor(startup.name) }}
+                                      aria-hidden="true"
+                                    >
+                                      {getStartupInitial(startup.name)}
+                                    </div>
+                                  ) : null}
+                                  {showLogoImage ? (
+                                    <img
+                                      src={startupLogoSrc}
+                                      alt={`${startup.name} logo`}
+                                      className="absolute inset-0 h-8 w-8 rounded-full bg-background/70 object-contain"
+                                      loading="lazy"
+                                      onLoad={() => {
+                                        setLogoLoadFailures((previous) => {
+                                          if (!previous[logoKey]) {
+                                            return previous;
+                                          }
+
+                                          const next = { ...previous };
+                                          delete next[logoKey];
+                                          return next;
+                                        });
+                                      }}
+                                      onError={() => {
+                                        setLogoLoadFailures((previous) => ({ ...previous, [logoKey]: true }));
+                                      }}
+                                    />
+                                  ) : null}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-foreground">{startup.name}</p>
+                                  <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                                    {startup.sector ?? "Uncategorized"}
+                                  </p>
+                                </div>
+                              </div>
+                              {startup.employees ? (
+                                <Badge className="bg-secondary/15 text-secondary">
+                                  <Users className="mr-1 h-3 w-3" />
+                                  {startup.employees}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">
+                      {activeFilters && !activeFilters.clearFilters ? "No startup profiles match the current filters." : "No startup profiles are available for this run."}
+                    </div>
+                  )}
+                </div>
+
+                {warnings.length > 0 || retryError ? (
+                  <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                      <p className="font-semibold text-destructive">Partial fallback state</p>
+                    </div>
+                    <ul className="mb-3 space-y-1 text-sm text-foreground">
+                      {warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                      {retryError ? <li key="retry-error">{retryError}</li> : null}
+                    </ul>
+                    <Button variant="secondary" size="sm" onClick={onRetry} disabled={isRetrying}>
+                      <RefreshCw className={`h-4 w-4 ${isRetrying ? "animate-spin" : ""}`} />
+                      {isRetrying ? "Retrying" : "Retry services"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">
+                    All services healthy. No active warnings.
+                  </div>
+                )}
+              </motion.div>
             )}
+          </AnimatePresence>
         </TabsContent>
 
         <TabsContent value="resources" className="space-y-4">

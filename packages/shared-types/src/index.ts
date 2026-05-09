@@ -25,18 +25,33 @@ export const FOUNDER_STAGES = [
 
 export type FounderStage = (typeof FOUNDER_STAGES)[number];
 
+export interface ResourceLocation {
+  id: string;
+  locationName: string;
+  address: string;
+  city: string;
+  state: string;
+  lat: number;
+  lng: number;
+  isPrimary: boolean;
+}
+
 export interface StartupResource {
   id: string;
   name: string;
   category: ResourceCategory;
   description: string;
+  sourceExternalId?: string | null;
   website: string | null;
   logoUrl: string | null;
+  contactEmail?: string | null;
+  communities?: string[];
   address: string | null;
   city: string;
   state: string;
   lat: number;
   lng: number;
+  locations: ResourceLocation[];
   stageFit: FounderStage[];
   industryFit: string[];
   tags: string[];
