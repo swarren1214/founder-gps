@@ -11,17 +11,22 @@ import {
   type RoadmapInput,
   MapFilterSchema,
   type MapFilter,
-  type MapChatInput
+  type MapChatInput,
+  ChatInputSchema,
+  ChatOutputSchema,
+  type ChatInput,
+  type ChatOutput
 } from "./schemas.js";
 import {
   analyzeFounderPrompt,
+  chatPrompt,
   explainRecommendationPrompt,
   generateRoadmapPrompt,
   mapChatPrompt,
   PROMPT_VERSIONS
 } from "./prompts.js";
 
-export type AiTask = "analyze-founder" | "explain-recommendation" | "generate-roadmap" | "map-chat";
+export type AiTask = "analyze-founder" | "explain-recommendation" | "generate-roadmap" | "map-chat" | "chat";
 
 export type AiMetadata = {
   provider: "openai" | "gemini" | "heuristic";
@@ -55,13 +60,18 @@ interface AiProvider {
 class OpenAiProvider implements AiProvider {
   name: AiMetadata["provider"] = "openai";
 
-  constructor(private readonly apiKey: string, public readonly model: string) {}
+  constructor(
+    private readonly apiKey: string,
+    public readonly model: string,
+    private readonly baseUrl: string = "https://api.openai.com/v1"
+  ) {}
 
   async generateObject<T>(options: GenerateObjectOptions<T>): Promise<AiResult<T>> {
     const started = Date.now();
     const payloadText = JSON.stringify(options.userPayload);
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const endpoint = `${this.baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -280,6 +290,111 @@ class HeuristicProvider implements AiProvider {
           intent: "general"
         };
       }
+    } else if (options.task === "chat") {
+      const input = ChatInputSchema.parse(options.userPayload) as ChatInput;
+      const profile = input.context.founderProfile;
+      const analysis = input.context.founderAnalysisSnapshot?.analysisJson as
+        | { stage?: string; primaryNeeds?: string[]; suggestedFocus?: string; confidenceScore?: number }
+        | undefined;
+      const recommendations = input.context.recommendations.slice(0, 3);
+      const resources = input.context.resources.slice(0, 3);
+      const startups = input.context.startups.slice(0, 2);
+      const hasProfile = profile !== null && profile !== undefined;
+      const intent: "ask" | "compare" | "recommend" | "act" | "clarify" = /compare|vs|versus/i.test(input.message)
+        ? "compare"
+        : /recommend|suggest|what should i do/i.test(input.message)
+          ? "recommend"
+          : /do it|save|filter|open|show/i.test(input.message)
+            ? "act"
+            : hasProfile
+              ? "ask"
+              : "clarify";
+
+      const topRecommendation = recommendations[0] as Record<string, unknown> | undefined;
+      const topResource = resources[0] as Record<string, unknown> | undefined;
+      const topStartup = startups[0] as Record<string, unknown> | undefined;
+
+      const markdownLines = [
+        `## ${profile ? `${profile.locationCity} founder update` : "Founder update"}`,
+        profile
+          ? `You are at the ${profile.stage} stage, building ${profile.startupIdea}.`
+          : "I need your founder profile before I can ground the answer in your startup context.",
+        analysis?.suggestedFocus ? `**Current focus:** ${analysis.suggestedFocus}` : null,
+        topRecommendation
+          ? `**Top recommendation:** ${String(topRecommendation.resourceName ?? topRecommendation.name ?? "resource")}`
+          : null,
+        topResource ? `**Relevant resource:** ${String(topResource.name ?? "resource")}` : null,
+        topStartup ? `**Nearby startup to watch:** ${String(topStartup.name ?? "startup")}` : null,
+        input.context.warnings.length > 0 ? `> ${input.context.warnings[0]}` : null,
+        "",
+        "### Next move",
+        hasProfile
+          ? "Pick one concrete action this week and keep the scope narrow."
+          : "Share your location, stage, idea, and biggest challenge so I can tailor the answer."
+      ]
+        .filter((line): line is string => line !== null)
+        .join("\n");
+
+      draft = {
+        responseMarkdown: markdownLines,
+        responsePayload: {
+          kind: "chat",
+          intent,
+          cards: [
+            ...(profile
+              ? [{ kind: "founder_profile", founderProfileId: profile.id, stage: profile.stage, city: profile.locationCity }]
+              : []),
+            ...(topRecommendation
+              ? [{ kind: "recommendation", label: String(topRecommendation.resourceName ?? topRecommendation.name ?? "Recommendation") }]
+              : []),
+            ...(topResource ? [{ kind: "resource", label: String(topResource.name ?? "Resource") }] : [])
+          ],
+          actions: hasProfile
+            ? [{ kind: "follow_up", label: "Refine your founder context" }]
+            : [{ kind: "share_profile", label: "Add founder profile details" }],
+          summary: profile
+            ? `${profile.locationCity} founder at ${profile.stage} stage with ${recommendations.length} recommendation(s) and ${resources.length} resource(s).`
+            : "Chat needs founder profile context to ground recommendations."
+        },
+        citations: [
+          ...(profile
+            ? [{ entityId: profile.id, entityType: "founder_profile", label: `${profile.locationCity} founder profile` }]
+            : []),
+          ...(analysis
+            ? [
+                {
+                  entityId: input.context.founderAnalysisSnapshot?.id ?? "latest-analysis",
+                  entityType: "founder_analysis_snapshot",
+                  label: "Latest founder analysis"
+                }
+              ]
+            : []),
+          ...(topRecommendation
+            ? [
+                {
+                  entityId: String(topRecommendation.id ?? topRecommendation.resourceId ?? "recommendation"),
+                  entityType: "recommendation",
+                  label: String(topRecommendation.resourceName ?? topRecommendation.name ?? "Top recommendation")
+                }
+              ]
+            : []),
+          ...(topResource
+            ? [{ entityId: String(topResource.id ?? "resource"), entityType: "resource", label: String(topResource.name ?? "Resource") }]
+            : []),
+          ...(topStartup
+            ? [{ entityId: String(topStartup.id ?? "startup"), entityType: "startup", label: String(topStartup.name ?? "Startup") }]
+            : [])
+        ],
+        suggestions: hasProfile
+          ? [
+              "Ask me to compare two resources.",
+              "Ask for a 7-day action plan.",
+              "Ask me to explain why the top recommendation matters now."
+            ]
+          : ["Share your founder profile to ground the next answer.", "Include stage, location, idea, and challenge."],
+        confidence: hasProfile ? 0.81 : 0.42,
+        followUpQuestion: hasProfile ? undefined : "What is your founder stage and biggest constraint right now?"
+      };
     } else {
       const input = options.userPayload as RoadmapInput;
       draft = {
@@ -371,6 +486,7 @@ class HeuristicProvider implements AiProvider {
 export type AiServiceConfig = {
   provider?: "openai" | "gemini" | "heuristic";
   openAiApiKey?: string;
+  openAiBaseUrl?: string;
   geminiApiKey?: string;
   model?: string;
   timeoutMs?: number;
@@ -383,7 +499,15 @@ export class AiService {
 
   private selectProvider(): AiProvider {
     if (this.config.provider === "openai" && this.config.openAiApiKey) {
-      return new OpenAiProvider(this.config.openAiApiKey, this.config.model ?? "gpt-4o-mini");
+      const defaultModel = this.config.openAiBaseUrl?.includes("integrate.api.nvidia.com")
+        ? "mistralai/mistral-nemotron"
+        : "gpt-4o-mini";
+
+      return new OpenAiProvider(
+        this.config.openAiApiKey,
+        this.config.model ?? defaultModel,
+        this.config.openAiBaseUrl ?? "https://api.openai.com/v1"
+      );
     }
 
     if (this.config.provider === "gemini" && this.config.geminiApiKey) {
@@ -478,5 +602,21 @@ export class AiService {
       systemPrompt: mapChatPrompt(),
       userPayload: input
     });
+  }
+
+  async chat(input: ChatInput): Promise<AiResult<ChatOutput>> {
+    const provider = this.selectProvider();
+    return this.withFallback(provider, {
+      task: "chat",
+      schema: ChatOutputSchema,
+      promptVersion: PROMPT_VERSIONS.chat,
+      systemPrompt: chatPrompt(input.stylePrefs),
+      userPayload: input
+    });
+  }
+
+  async *streamChat(input: ChatInput): AsyncIterable<string> {
+    const result = await this.chat(input);
+    yield JSON.stringify(result.data);
   }
 }

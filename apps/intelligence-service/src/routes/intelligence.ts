@@ -9,6 +9,7 @@ import {
 } from "@founder-gps/ai";
 import { sendApiError } from "@founder-gps/shared-types";
 import type { IntelligenceRepository } from "../repository.js";
+import { chatRoutes } from "./chat.js";
 
 function logMetadata(app: FastifyInstance, route: string, metadata: Record<string, unknown>) {
   app.log.info({ route, ...metadata }, "ai_call_complete");
@@ -17,8 +18,15 @@ function logMetadata(app: FastifyInstance, route: string, metadata: Record<strin
 export async function intelligenceRoutes(
   app: FastifyInstance,
   repository: IntelligenceRepository,
-  aiService: AiService
+  aiService: AiService,
+  options: { resourceServiceUrl: string; recommendationServiceUrl: string; fetchImpl?: typeof fetch }
 ) {
+  await chatRoutes(app, repository, aiService, {
+    resourceServiceUrl: options.resourceServiceUrl,
+    recommendationServiceUrl: options.recommendationServiceUrl,
+    fetchImpl: options.fetchImpl
+  });
+
   app.post("/intelligence/analyze-founder", async (request, reply) => {
     const parsed = FounderAnalysisInputSchema.safeParse(request.body);
     if (!parsed.success) {

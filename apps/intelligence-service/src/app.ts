@@ -11,6 +11,9 @@ export type AppOptions = {
   repository?: IntelligenceRepository;
   aiService?: AiService;
   databaseUrl?: string;
+  resourceServiceUrl?: string;
+  recommendationServiceUrl?: string;
+  fetchImpl?: typeof fetch;
 };
 
 export function buildApp(options: AppOptions = {}) {
@@ -27,7 +30,12 @@ export function buildApp(options: AppOptions = {}) {
   app.get("/health", async () => ({ ok: true }));
 
   app.register(async (instance) => {
-    await intelligenceRoutes(instance, repository, aiService);
+    await intelligenceRoutes(instance, repository, aiService, {
+      resourceServiceUrl: options.resourceServiceUrl ?? process.env.RESOURCE_SERVICE_URL ?? "http://localhost:4001",
+      recommendationServiceUrl:
+        options.recommendationServiceUrl ?? process.env.RECOMMENDATION_SERVICE_URL ?? "http://localhost:4004",
+      fetchImpl: options.fetchImpl
+    });
   });
 
   return app;

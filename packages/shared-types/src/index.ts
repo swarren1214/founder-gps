@@ -114,4 +114,5 @@ export interface FounderRoute {
   geojson: RouteGeoJsonFeatureCollection;
 }
 
+export * from "./chat.js";
 export * from "./errors.js";

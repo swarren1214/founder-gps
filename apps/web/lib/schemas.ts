@@ -172,6 +172,36 @@ export const mapChatRequestSchema = z.object({
   availableSectors: z.array(z.string())
 });
 
+export const chatRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  userId: z.string().uuid(),
+  message: z.string().min(1),
+  stylePrefs: z
+    .object({
+      tone: z.enum(["concise", "encouraging", "strategic", "technical"]),
+      emojiMode: z.enum(["off", "light", "expressive"]),
+      verbosity: z.enum(["short", "standard", "deep dive"])
+    })
+    .optional()
+});
+
+export const chatResponseSchema = z.object({
+  responseMarkdown: z.string(),
+  responsePayload: z.record(z.unknown()),
+  citations: z.array(
+    z.object({
+      entityId: z.string(),
+      entityType: z.string(),
+      label: z.string(),
+      url: z.string().optional()
+    })
+  ),
+  suggestions: z.array(z.string()),
+  metadata: z.record(z.unknown()),
+  sessionId: z.string(),
+  contextSummary: z.string()
+});
+
 export type FounderIntake = z.infer<typeof founderIntakeSchema>;
 export type FounderAnalysis = z.infer<typeof founderAnalysisSchema>;
 export type Recommendation = z.infer<typeof recommendationSchema>;
@@ -182,3 +212,5 @@ export type ResourceCardData = z.infer<typeof startupResourceSchema>;
 export type StartupProfileData = z.infer<typeof startupProfileSchema>;
 export type MapFilters = z.infer<typeof mapFilterSchema>;
 export type MapChatRequest = z.infer<typeof mapChatRequestSchema>;
+export type ChatRequest = z.infer<typeof chatRequestSchema>;
+export type ChatResponse = z.infer<typeof chatResponseSchema>;
