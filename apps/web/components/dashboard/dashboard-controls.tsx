@@ -82,21 +82,14 @@ function resolveLogoSource(
 ): string | null {
   const versionToken = updatedAt ? String(Date.parse(updatedAt) || updatedAt) : null;
 
-  if (logoUrl?.startsWith("/")) {
-    return appendVersionParam(logoUrl, versionToken);
-  }
-
   const domain = getDomainFromUrl(website);
   if (logoUrl) {
+    if (!/^https?:\/\//i.test(logoUrl)) {
+      return null;
+    }
+
     return appendVersionParam(
       `/api/logo?src=${encodeURIComponent(logoUrl)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}&size=64${strict ? "&strict=1" : ""}`,
-      versionToken
-    );
-  }
-
-  if (domain) {
-    return appendVersionParam(
-      `/api/logo?domain=${encodeURIComponent(domain)}&size=64${strict ? "&strict=1" : ""}`,
       versionToken
     );
   }

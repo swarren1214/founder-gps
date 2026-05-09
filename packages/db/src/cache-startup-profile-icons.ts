@@ -5,99 +5,11 @@ import { dbPool } from "./client.js";
 
 type StartupLogoRow = {
   id: string;
-  name: string;
   website: string | null;
   logo_url: string | null;
 };
 
-type BrandfetchFormat = {
-  src: string;
-  format?: string;
-  width?: number;
-  height?: number;
-};
-
-type BrandfetchLogo = {
-  type?: string;
-  formats?: BrandfetchFormat[];
-};
-
-type BrandfetchResponse = {
-  logos?: BrandfetchLogo[];
-};
-
-type BrandfetchCandidate = {
-  logoType: string;
-  format: BrandfetchFormat;
-};
-
 const ALLOWED_EXTENSIONS = new Set(["svg", "png", "jpg", "jpeg", "webp", "avif"]);
-
-function normalizeBrandfetchFormat(value?: string): "svg" | "png" | "jpeg" | "other" {
-  const normalized = (value ?? "").toLowerCase();
-  if (normalized.includes("svg")) return "svg";
-  if (normalized.includes("png")) return "png";
-  if (normalized.includes("jpeg") || normalized.includes("jpg")) return "jpeg";
-  return "other";
-}
-
-function inferFormatFromSrc(src: string): "svg" | "png" | "jpeg" | "other" {
-  try {
-    const parsed = new URL(src);
-    const pathName = parsed.pathname.toLowerCase();
-    if (pathName.endsWith(".svg")) return "svg";
-    if (pathName.endsWith(".png")) return "png";
-    if (pathName.endsWith(".jpeg") || pathName.endsWith(".jpg")) return "jpeg";
-  } catch {
-    // noop
-  }
-  return "other";
-}
-
-function formatRank(candidate: BrandfetchCandidate): number {
-  const fromFormat = normalizeBrandfetchFormat(candidate.format.format);
-  const inferred = inferFormatFromSrc(candidate.format.src);
-  const normalized = fromFormat === "other" ? inferred : fromFormat;
-
-  if (normalized === "svg") return 0;
-  if (normalized === "png") return 1;
-  if (normalized === "jpeg") return 2;
-  return 3;
-}
-
-function pickBrandfetchSource(payload: BrandfetchResponse): string | null {
-  const allCandidates: BrandfetchCandidate[] = (payload.logos ?? [])
-    .flatMap((logo) =>
-      (logo.formats ?? []).map((format) => ({
-        logoType: logo.type ?? "",
-        format
-      }))
-    )
-    .filter((entry) => typeof entry.format.src === "string" && entry.format.src.length > 0);
-
-  const iconCandidates = allCandidates.filter((entry) => entry.logoType.toLowerCase() === "icon");
-  const fallbackCandidates = allCandidates.filter((entry) => entry.logoType.toLowerCase() !== "icon");
-  const candidatePool = iconCandidates.length > 0 ? iconCandidates : fallbackCandidates;
-
-  candidatePool.sort((a, b) => {
-    const rankDiff = formatRank(a) - formatRank(b);
-    if (rankDiff !== 0) {
-      return rankDiff;
-    }
-
-    const aWidth = a.format.width ?? 0;
-    const bWidth = b.format.width ?? 0;
-    if (aWidth !== bWidth) {
-      return bWidth - aWidth;
-    }
-
-    const aHeight = a.format.height ?? 0;
-    const bHeight = b.format.height ?? 0;
-    return bHeight - aHeight;
-  });
-
-  return candidatePool[0]?.format.src ?? null;
-}
 
 function getOutputDirectory(): string {
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -195,34 +107,6 @@ function logoDevUrl(domain: string, size: number): string {
   return url.toString();
 }
 
-async function getBrandfetchLogoSource(
-  domain: string,
-  apiKey: string
-): Promise<{ source: string | null; quotaExceeded: boolean }> {
-  try {
-    const response = await fetch(`https://api.brandfetch.io/v2/brands/${encodeURIComponent(domain)}`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "application/json"
-      },
-      cache: "no-store"
-    });
-
-    if (response.status === 429) {
-      return { source: null, quotaExceeded: true };
-    }
-
-    if (!response.ok) {
-      return { source: null, quotaExceeded: false };
-    }
-
-    const payload = (await response.json()) as BrandfetchResponse;
-    return { source: pickBrandfetchSource(payload), quotaExceeded: false };
-  } catch {
-    return { source: null, quotaExceeded: false };
-  }
-}
-
 async function downloadFirst(
   sources: string[]
 ): Promise<{ bytes: Uint8Array; extension: string; source: string } | null> {
@@ -240,12 +124,9 @@ async function run() {
   const outputDir = getOutputDirectory();
   await mkdir(outputDir, { recursive: true });
 
-  const apiKey = process.env.BRANDFETCH_API_KEY ?? "";
-  let brandfetchQuotaExceeded = false;
-
   const result = await dbPool.query<StartupLogoRow>(
     `
-    SELECT id, name, website, logo_url
+    SELECT id, website, logo_url
     FROM startup_profiles
     ORDER BY name ASC
     `
@@ -264,18 +145,8 @@ async function run() {
       sourceCandidates.push(logoDevUrl(domain, 64));
     }
 
-    if (existingLogo && !existingLogo.startsWith("/startup-logos/")) {
+    if (existingLogo && /^https?:\/\//i.test(existingLogo)) {
       sourceCandidates.push(existingLogo);
-    }
-
-    if (domain && apiKey && !brandfetchQuotaExceeded) {
-      const brandfetch = await getBrandfetchLogoSource(domain, apiKey);
-      if (brandfetch.quotaExceeded) {
-        brandfetchQuotaExceeded = true;
-      }
-      if (brandfetch.source) {
-        sourceCandidates.push(brandfetch.source);
-      }
     }
 
     if (domain) {
@@ -308,8 +179,6 @@ async function run() {
     );
 
     updated += 1;
-
-    // Keep request rate controlled while downloading remote assets.
     await new Promise((resolve) => setTimeout(resolve, 40));
   }
 
