@@ -28,8 +28,8 @@ const defaultValue: FounderIntake = {
   challenge: "",
   fundingStatus: "bootstrapped",
   background: "",
-  category: "community",
-  cityFilter: "Lehi",
+  category: undefined,
+  cityFilter: undefined,
   topN: 4
 };
 
@@ -305,7 +305,8 @@ export function FounderIntakeForm() {
               </div>
               <div>
                 <Label htmlFor="category">Priority resource category</Label>
-                <select id="category" className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/25" value={form.category} onChange={(event) => updateField("category", event.target.value as FounderIntake["category"])}>
+                <select id="category" className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/25" value={form.category ?? ""} onChange={(event) => updateField("category", (event.target.value || undefined) as FounderIntake["category"])}>
+                  <option value="">Any category</option>
                   {categoryOptions.map((option) => (
                     <option key={option} value={option}>{option}</option>
                   ))}
@@ -313,7 +314,7 @@ export function FounderIntakeForm() {
               </div>
               <div>
                 <Label htmlFor="cityFilter">City filter</Label>
-                <Input id="cityFilter" value={form.cityFilter ?? ""} onChange={(event) => updateField("cityFilter", event.target.value)} />
+                <Input id="cityFilter" value={form.cityFilter ?? ""} onChange={(event) => updateField("cityFilter", event.target.value || undefined)} />
               </div>
               <div>
                 <Label htmlFor="topN">Top recommendations</Label>
