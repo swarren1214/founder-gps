@@ -252,6 +252,19 @@ DEBUG=founder-gps:* pnpm -C apps/web dev
 3. Run: `DATABASE_URL="..." pnpm --filter @founder-gps/db migrate`
 4. The migration runner tracks applied migrations in `schema_migrations` table
 
+### Supabase Schema Push
+
+1. Sync any new repo migrations into Supabase format:
+   ```bash
+   pnpm db:supabase:sync
+   ```
+2. Push synced migrations to your linked Supabase project:
+   ```bash
+   pnpm db:supabase:push
+   ```
+
+`db:supabase:push` automatically runs the sync step first, then executes `supabase db push`.
+
 ## Deployment
 
 ### Vercel (Recommended for Web)

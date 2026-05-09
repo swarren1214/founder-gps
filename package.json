@@ -10,7 +10,9 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "docs:generate": "node scripts/generate-api-docs.mjs"
+    "docs:generate": "node scripts/generate-api-docs.mjs",
+    "db:supabase:sync": "node scripts/sync-supabase-migrations.mjs",
+    "db:supabase:push": "pnpm db:supabase:sync && supabase db push"
   },
   "devDependencies": {
     "turbo": "^2.0.12",
