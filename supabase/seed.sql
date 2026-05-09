@@ -1,0 +1,1 @@
+-- Optional seed data for Supabase local reset

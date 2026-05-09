@@ -12,13 +12,7 @@ import { AuthScreenSkeleton } from "@/components/ui/loading-screens";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { getSignedInRedirectTarget } from "@/lib/auth-routing";
 import { useTheme } from "@/components/theme-provider";
-import { CheckCircle2, Lock, Mail, Moon, Sun, UserPlus } from "lucide-react";
-
-const onboardingSteps = [
-  "Create account",
-  "Founder profile",
-  "Founder interview"
-] as const;
+import { Lock, Mail, Moon, Sun, UserPlus } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -101,24 +95,6 @@ export default function RegisterPage() {
               className="h-10 w-auto"
               priority
             />
-          </div>
-
-          <div className="mb-7 rounded-2xl border border-border/70 bg-muted/35 p-4">
-            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Onboarding</p>
-            <div className="grid gap-3 md:grid-cols-3">
-              {onboardingSteps.map((label, index) => (
-                <div key={label} className="flex items-center gap-2 rounded-xl px-2 py-1.5">
-                  {index === 0 ? (
-                    <CheckCircle2 className="h-4 w-4 text-primary" aria-hidden="true" />
-                  ) : (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-muted-foreground/40 text-[10px] text-muted-foreground">
-                      {index + 1}
-                    </span>
-                  )}
-                  <span className={index === 0 ? "text-sm font-semibold text-foreground" : "text-sm text-muted-foreground"}>{label}</span>
-                </div>
-              ))}
-            </div>
           </div>
 
           <form className="space-y-5" onSubmit={onSubmit}>
