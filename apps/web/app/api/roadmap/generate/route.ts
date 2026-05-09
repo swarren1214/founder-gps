@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  roadmapSchema,
   roadmapGenerateRequestSchema,
   roadmapGenerateResponseSchema,
   type RoadmapGenerateResponse,
@@ -8,10 +9,11 @@ import {
   type RoadmapTaskPlan
 } from "@/lib/schemas";
 import { getAuthServiceUrl } from "@/lib/auth-service";
-import { getResourceServiceUrl } from "@/lib/service-urls";
+import { getIntelligenceServiceUrl, getResourceServiceUrl } from "@/lib/service-urls";
 
 const ROADMAP_MODEL = process.env.OPENAI_ROADMAP_MODEL ?? process.env.AI_MODEL ?? "gpt-4o-mini";
 const RESOURCE_SERVICE_URL = getResourceServiceUrl();
+const INTELLIGENCE_SERVICE_URL = getIntelligenceServiceUrl();
 const MODEL_TIMEOUT_MS = 20000;
 
 function getChatCompletionsUrl(): string {
@@ -349,6 +351,38 @@ async function fetchDatabaseStartups(input: {
   }
 }
 
+function buildPlanFromRoadmap(roadmap: { weeks: Array<{ weekNumber: number; tasks: Array<{ title: string }> }> }): RoadmapTaskPlan {
+  const today: RoadmapTask[] = [];
+  const week: RoadmapTask[] = [];
+  const month: RoadmapTask[] = [];
+
+  for (const roadmapWeek of roadmap.weeks) {
+    const targetBucket = roadmapWeek.weekNumber <= 1 ? week : month;
+
+    for (const task of roadmapWeek.tasks) {
+      const title = task.title.trim();
+      if (!title) {
+        continue;
+      }
+
+      targetBucket.push(makeTask(title, roadmapWeek.weekNumber <= 1 ? "week" : "month", "ai"));
+
+      // Seed "today" with a few immediate actions from the first week.
+      if (roadmapWeek.weekNumber <= 1 && today.length < 4) {
+        today.push(makeTask(title, "today", "ai"));
+      }
+    }
+  }
+
+  return {
+    today,
+    week,
+    month,
+    generatedAt: new Date().toISOString(),
+    generatedFrom: "llm"
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -388,16 +422,36 @@ export async function POST(request: NextRequest) {
       summary: resource.description
     }));
 
-    const previousTaskTitles = extractPreviousTaskTitles(onboardingContext);
-
-    const plan = await generateWithLlm({
-      founderSummary,
-      recommendations: topRecommendations,
-      resources: topResources,
-      startups: databaseStartups,
-      onboardingContext,
-      previousTaskTitles
+    const roadmapResponse = await fetch(`${INTELLIGENCE_SERVICE_URL}/intelligence/generate-roadmap`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        founderProfileId: parsed.data.founderProfile.founderProfileId,
+        founderSummary: `${founderSummary.location} founder building ${founderSummary.idea}`,
+        stage: founderSummary.stage,
+        needs: founderSummary.needs,
+        recommendations: topRecommendations.map((item) => `${item.name}: ${item.action}`),
+        constraints: [parsed.data.founderProfile.fundingStatus, founderSummary.challenge].filter(Boolean)
+      }),
+      cache: "no-store"
     });
+
+    if (!roadmapResponse.ok) {
+      const message = await roadmapResponse.text();
+      throw new Error(`Roadmap service failed (${roadmapResponse.status}): ${message.slice(0, 240)}`);
+    }
+
+    const roadmapPayload = (await roadmapResponse.json()) as { roadmap?: unknown };
+    const parsedRoadmap = roadmapSchema.safeParse(roadmapPayload.roadmap);
+    if (!parsedRoadmap.success) {
+      throw new Error("Roadmap service returned an invalid roadmap payload.");
+    }
+
+    const plan = buildPlanFromRoadmap(parsedRoadmap.data);
+
+    // Keep a couple of context variables live for future model-augmented versions.
+    void databaseStartups;
+    void onboardingContext;
 
     const responsePayload: RoadmapGenerateResponse = { plan };
     return NextResponse.json(roadmapGenerateResponseSchema.parse(responsePayload));
