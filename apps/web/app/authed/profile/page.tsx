@@ -23,7 +23,7 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useMemo, useRef, useState, useTransition, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -116,15 +116,17 @@ export default function ProfilePage() {
   const [form, setForm] = useState<ProfileFormState | null>(null);
   const [savedFormSnapshot, setSavedFormSnapshot] = useState<ProfileFormState | null>(null);
 
-  if (initialForm !== null) {
-    if (form === null) {
+  useEffect(() => {
+    if (initialForm !== null && form === null) {
       setForm(initialForm);
     }
+  }, [initialForm, form]);
 
-    if (savedFormSnapshot === null) {
+  useEffect(() => {
+    if (initialForm !== null && savedFormSnapshot === null) {
       setSavedFormSnapshot(initialForm);
     }
-  }
+  }, [initialForm, savedFormSnapshot]);
 
   function updateField<K extends keyof ProfileFormState>(key: K, value: ProfileFormState[K]) {
     setForm((current) => (current ? { ...current, [key]: value } : current));
