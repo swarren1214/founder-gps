@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FounderMap } from "@/components/map/founder-map";
 import { useOnboardingGate } from "@/hooks/use-onboarding-gate";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { MapScreenSkeleton } from "@/components/ui/loading-screens";
 
 export default function MapPage() {
   const router = useRouter();
@@ -17,16 +18,7 @@ export default function MapPage() {
   }, [isLoading, isOnboarded, router]);
 
   if (isLoading) {
-    return (
-      <main className="page-shell min-h-screen px-5 py-10 md:px-10 lg:px-14">
-        <div className="mx-auto max-w-3xl">
-          <Card>
-            <CardTitle>Loading map...</CardTitle>
-            <CardDescription className="mt-3">Preparing your founder route data.</CardDescription>
-          </Card>
-        </div>
-      </main>
-    );
+    return <MapScreenSkeleton />;
   }
 
   if (!isOnboarded || !run) {

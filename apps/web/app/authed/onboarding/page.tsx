@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { FounderIntakeForm } from "@/components/onboarding/founder-intake-form";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { OnboardingScreenSkeleton } from "@/components/ui/loading-screens";
 import { useAuthUser } from "@/hooks/use-auth-user";
 
 export default function OnboardingPage() {
@@ -16,6 +17,10 @@ export default function OnboardingPage() {
       router.replace("/authed/dashboard");
     }
   }, [isLoading, isOnboarded, router]);
+
+  if (isLoading) {
+    return <OnboardingScreenSkeleton />;
+  }
 
   if (!isLoading && isOnboarded) {
     return (

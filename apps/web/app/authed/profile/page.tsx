@@ -10,7 +10,11 @@ import {
   Mail,
   ImagePlus,
   MapPin,
-  Phone,
+    Building2,
+    Calendar,
+    Globe,
+    Phone,
+    Rocket,
   UploadCloud,
   User,
   UserCircle2,
@@ -25,11 +29,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { ProfileScreenSkeleton } from "@/components/ui/loading-screens";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { broadcastAuthUserRefresh, useAuthUser } from "@/hooks/use-auth-user";
+import { broadcastAuthUserRefresh, useAuthUser, type AuthUserPayload } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type ProfileFormState = {
   firstName: string;
@@ -164,8 +170,9 @@ export default function ProfilePage() {
     }
 
     startSaving(async () => {
-      try {
-        setNotice(null);
+      setNotice(null);
+      toast.promise(
+        (async () => {
         const response = await fetch("/api/auth/profile", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -200,21 +207,30 @@ export default function ProfilePage() {
         setNotice("Profile saved.");
         broadcastAuthUserRefresh();
         router.refresh();
-      } catch (error) {
-        setNotice(error instanceof Error ? error.message : "Failed to save profile.");
-      }
+        })(),
+        {
+          loading: "Saving profile...",
+          success: "Profile saved.",
+          error: (error) => {
+            const message = error instanceof Error ? error.message : "Failed to save profile.";
+            setNotice(message);
+            return message;
+          }
+        }
+      );
     });
   }
 
   function uploadAvatar() {
     if (!avatarFile) {
-      setAvatarNotice("Choose an avatar file first.");
+      toast.error("Choose an avatar file first.");
       return;
     }
 
     startUploadingAvatar(async () => {
-      try {
-        setAvatarNotice(null);
+      setAvatarNotice(null);
+      toast.promise(
+        (async () => {
         const payload = new FormData();
         payload.append("avatar", avatarFile);
 
@@ -235,16 +251,25 @@ export default function ProfilePage() {
         setAvatarNotice(null);
         broadcastAuthUserRefresh();
         router.refresh();
-      } catch (error) {
-        setAvatarNotice(error instanceof Error ? error.message : "Failed to upload avatar.");
-      }
+        })(),
+        {
+          loading: "Uploading avatar...",
+          success: "Avatar uploaded.",
+          error: (error) => {
+            const message = error instanceof Error ? error.message : "Failed to upload avatar.";
+            setAvatarNotice(message);
+            return message;
+          }
+        }
+      );
     });
   }
 
   function removeAvatar() {
     startRemovingAvatar(async () => {
-      try {
-        setAvatarNotice(null);
+      setAvatarNotice(null);
+      toast.promise(
+        (async () => {
         const response = await fetch("/api/auth/avatar", { method: "DELETE" });
         const json = await response.json();
         if (!response.ok) {
@@ -258,9 +283,17 @@ export default function ProfilePage() {
         setAvatarNotice("Avatar removed.");
         broadcastAuthUserRefresh();
         router.refresh();
-      } catch (error) {
-        setAvatarNotice(error instanceof Error ? error.message : "Failed to remove avatar.");
-      }
+        })(),
+        {
+          loading: "Removing avatar...",
+          success: "Avatar removed.",
+          error: (error) => {
+            const message = error instanceof Error ? error.message : "Failed to remove avatar.";
+            setAvatarNotice(message);
+            return message;
+          }
+        }
+      );
     });
   }
 
@@ -273,13 +306,13 @@ export default function ProfilePage() {
 
     if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
       setAvatarFile(null);
-      setAvatarNotice("Unsupported file type. Use PNG, JPG, WEBP, or GIF.");
+      toast.error("Unsupported file type. Use PNG, JPG, WEBP, or GIF.");
       return;
     }
 
     if (file.size > MAX_AVATAR_BYTES) {
       setAvatarFile(null);
-      setAvatarNotice("Avatar must be 2 MB or smaller.");
+      toast.error("Avatar must be 2 MB or smaller.");
       return;
     }
 
@@ -298,16 +331,7 @@ export default function ProfilePage() {
   }
 
   if (isLoading || !authUser || !form) {
-    return (
-      <main className="page-shell min-h-screen px-5 py-10 md:px-10 lg:px-14">
-        <div className="mx-auto max-w-3xl">
-          <Card>
-            <CardTitle>Loading profile...</CardTitle>
-            <CardDescription className="mt-3">Preparing your account settings.</CardDescription>
-          </Card>
-        </div>
-      </main>
-    );
+    return <ProfileScreenSkeleton />;
   }
 
   const personName = [authUser.profile.firstName, authUser.profile.lastName].filter(Boolean).join(" ").trim();
@@ -450,12 +474,6 @@ export default function ProfilePage() {
                 </div>
               ) : null}
 
-              {shouldShowAvatarNotice ? (
-                <Alert className="mt-3 border-border/70 bg-background/70">
-                  <AlertDescription>{avatarNotice}</AlertDescription>
-                </Alert>
-              ) : null}
-
               {avatarFile || hasStoredAvatar ? (
                 <div className="mt-auto pt-4 flex flex-wrap gap-2">
                   {avatarFile ? (
@@ -559,15 +577,169 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {notice ? (
-                <Alert className="mt-4 border-border/70 bg-muted/35">
-                  <AlertDescription>{notice}</AlertDescription>
-                </Alert>
-              ) : null}
             </section>
           </div>
         </Card>
+
+        <StartupProfileSection authUser={authUser} />
       </div>
     </main>
+  );
+}
+
+function StartupProfileSection({ authUser }: { authUser: AuthUserPayload }) {
+  const ctx = authUser.profile.onboardingContext as Record<string, unknown>;
+  const ctxCompany =
+    typeof ctx?.company === "object" && ctx.company !== null
+      ? (ctx.company as Record<string, unknown>)
+      : null;
+  const ctxDetails =
+    typeof ctx?.details === "object" && ctx.details !== null
+      ? (ctx.details as Record<string, unknown>)
+      : null;
+  const ctxInterview = Array.isArray(ctx?.interview)
+    ? (ctx.interview as Array<{ question: string; answer: string }>)
+    : [];
+
+  const companyName =
+    authUser.profile.companyName?.trim() ||
+    (typeof ctxCompany?.companyName === "string" ? ctxCompany.companyName : null);
+  const website = typeof ctxCompany?.website === "string" ? ctxCompany.website : null;
+  const companySize = typeof ctxCompany?.companySize === "string" ? ctxCompany.companySize : null;
+  const dateFounded = typeof ctxCompany?.dateFounded === "string" ? ctxCompany.dateFounded : null;
+  const companyAddress = typeof ctxCompany?.address === "string" ? ctxCompany.address : null;
+  const stage = typeof ctxDetails?.stage === "string" ? ctxDetails.stage : null;
+  const description = typeof ctxDetails?.description === "string" ? ctxDetails.description : null;
+
+  const hasAnyData = Boolean(
+    companyName || website || companySize || dateFounded || companyAddress || stage || description || ctxInterview.length > 0
+  );
+
+  return (
+    <Card className="border-border/80 bg-card/95 shadow-2xl">
+      <div>
+        <CardTitle className="flex items-center gap-2">
+          <Building2 className="h-5 w-5 text-secondary" />
+          Startup profile
+        </CardTitle>
+        <CardDescription className="mt-2">
+          Your startup information collected during onboarding.
+        </CardDescription>
+      </div>
+
+      {!hasAnyData ? (
+        <div className="mt-8 rounded-2xl border border-dashed border-border/70 bg-muted/30 p-6 text-center">
+          <Building2 className="mx-auto h-8 w-8 text-muted-foreground/50" />
+          <p className="mt-3 text-sm font-medium text-muted-foreground">No startup profile yet</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Complete onboarding to set up your startup profile.
+          </p>
+          <Button asChild variant="outline" size="sm" className="mt-4 rounded-xl">
+            <Link href="/authed/onboarding">Start onboarding</Link>
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-8 space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            {companyName ? (
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  <Building2 className="h-3.5 w-3.5" />
+                  Company name
+                </p>
+                <p className="text-sm font-medium text-foreground">{companyName}</p>
+              </div>
+            ) : null}
+
+            {stage ? (
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  <Rocket className="h-3.5 w-3.5" />
+                  Stage
+                </p>
+                <p className="text-sm font-medium capitalize text-foreground">{stage.replaceAll("-", " ")}</p>
+              </div>
+            ) : null}
+
+            {companySize ? (
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  <Users className="h-3.5 w-3.5" />
+                  Team size
+                </p>
+                <p className="text-sm font-medium text-foreground">{companySize}</p>
+              </div>
+            ) : null}
+
+            {dateFounded ? (
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5" />
+                  Date founded
+                </p>
+                <p className="text-sm font-medium text-foreground">{dateFounded}</p>
+              </div>
+            ) : null}
+
+            {companyAddress ? (
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Location
+                </p>
+                <p className="text-sm font-medium text-foreground">{companyAddress}</p>
+              </div>
+            ) : null}
+
+            {website ? (
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  <Globe className="h-3.5 w-3.5" />
+                  Website
+                </p>
+                <a
+                  href={website}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-medium text-secondary underline-offset-4 hover:underline"
+                >
+                  {website}
+                </a>
+              </div>
+            ) : null}
+          </div>
+
+          {description ? (
+            <div className="space-y-1.5">
+              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                <FileText className="h-3.5 w-3.5" />
+                Description
+              </p>
+              <p className="text-sm leading-6 text-foreground/90">{description}</p>
+            </div>
+          ) : null}
+
+          {ctxInterview.length > 0 ? (
+            <div className="space-y-3">
+              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                <Briefcase className="h-3.5 w-3.5" />
+                Founder interview
+              </p>
+              <div className="space-y-3">
+                {ctxInterview.map((turn, index) => (
+                  <div
+                    key={index}
+                    className="rounded-2xl border border-border/70 bg-muted/30 p-4"
+                  >
+                    <p className="text-xs font-medium text-muted-foreground">{turn.question}</p>
+                    <p className="mt-2 text-sm leading-6 text-foreground/90">{turn.answer}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </Card>
   );
 }

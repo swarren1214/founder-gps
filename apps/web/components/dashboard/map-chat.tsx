@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { filterResources, filterStartups } from "@/lib/map-filters";
 import type { FounderFlowResponse, MapFilters, ResourceCardData } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type MapChatProps = {
   founderProfile: FounderFlowResponse["founderProfile"];
@@ -23,6 +24,29 @@ type Message = {
   role: "user" | "assistant";
   content: string;
 };
+
+type DistanceBounds = {
+  maxDistanceMiles?: number;
+  maxDurationMinutes?: number;
+};
+
+type DistanceFilterResult = {
+  filters: MapFilters | undefined;
+  usedProfileFallback: boolean;
+};
+
+type MatrixDestination = {
+  id: string;
+  coordinates: [number, number];
+};
+
+type MatrixRow = {
+  id: string;
+  distanceMeters: number;
+  durationSeconds: number;
+};
+
+const ORS_MATRIX_BATCH_SIZE = 60;
 
 function pluralize(value: number, singular: string, plural: string): string {
   return `${value} ${value === 1 ? singular : plural}`;
@@ -114,6 +138,73 @@ function extractStartupStageKeywords(query: string): string[] {
   return Array.from(keywords);
 }
 
+function extractDistanceBounds(query: string): DistanceBounds | null {
+  const normalized = query.toLowerCase();
+  let maxDistanceMiles: number | undefined;
+  let maxDurationMinutes: number | undefined;
+
+  const distanceMatch = normalized.match(
+    /(?:within|under|less than|fewer than|no more than|at most)\s+(\d+(?:\.\d+)?)\s*(miles?|mi|kilometers?|kms?|km)\b/i
+  );
+  if (distanceMatch) {
+    const value = Number(distanceMatch[1]);
+    if (Number.isFinite(value) && value > 0) {
+      const unit = distanceMatch[2].toLowerCase();
+      maxDistanceMiles = unit.startsWith("km") || unit.startsWith("kilometer") ? value * 0.621371 : value;
+    }
+  }
+
+  const durationMatch = normalized.match(
+    /(?:within|under|less than|fewer than|no more than|at most)\s+(\d+(?:\.\d+)?)\s*(minutes?|mins?|min)\b/i
+  );
+  if (durationMatch) {
+    const value = Number(durationMatch[1]);
+    if (Number.isFinite(value) && value > 0) {
+      maxDurationMinutes = value;
+    }
+  }
+
+  if (maxDistanceMiles === undefined && maxDurationMinutes === undefined) {
+    return null;
+  }
+
+  return { maxDistanceMiles, maxDurationMinutes };
+}
+
+function queryRequestsCurrentLocation(query: string): boolean {
+  return /\b(current location|my location|near me|around me|closest to me|from me|where i am)\b/i.test(query);
+}
+
+function getCurrentBrowserLocation(): Promise<[number, number] | null> {
+  if (typeof window === "undefined" || !("geolocation" in navigator)) {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve([position.coords.longitude, position.coords.latitude]);
+      },
+      () => {
+        resolve(null);
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 5 * 60 * 1000
+      }
+    );
+  });
+}
+
+function chunkDestinations(destinations: MatrixDestination[], chunkSize: number): MatrixDestination[][] {
+  const chunks: MatrixDestination[][] = [];
+  for (let index = 0; index < destinations.length; index += chunkSize) {
+    chunks.push(destinations.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
 function normalizeIntentFromQuery(query: string, filters: MapFilters): MapFilters {
   const queryLower = query.toLowerCase();
   const asksStartups = /\bstartups?\b/.test(queryLower);
@@ -193,6 +284,151 @@ export function MapChat({
     scrollToBottom();
   }, [messages]);
 
+  async function applyDistanceFilter(query: string, filters: MapFilters | undefined): Promise<DistanceFilterResult> {
+    const bounds = extractDistanceBounds(query);
+    if (!bounds) {
+      return { filters, usedProfileFallback: false };
+    }
+
+    const hasProfileOrigin =
+      Number.isFinite(founderProfile.locationLng) &&
+      Number.isFinite(founderProfile.locationLat);
+    if (!hasProfileOrigin) {
+      return { filters, usedProfileFallback: false };
+    }
+
+    let origin: [number, number] = [founderProfile.locationLng, founderProfile.locationLat];
+    let usedProfileFallback = false;
+
+    if (queryRequestsCurrentLocation(query)) {
+      const browserLocation = await getCurrentBrowserLocation();
+      if (browserLocation) {
+        origin = browserLocation;
+      } else {
+        usedProfileFallback = true;
+      }
+    }
+
+    const baseFilters: MapFilters =
+      filters ?? {
+        intent: "filter_both",
+        tab: "overview"
+      };
+
+    const includeResources = baseFilters.intent !== "filter_startups";
+    const includeStartups = baseFilters.intent !== "filter_resources";
+
+    const preDistanceFilters: MapFilters = {
+      ...baseFilters,
+      nearbyResourceIds: undefined,
+      nearbyStartupIds: undefined,
+      maxDistanceMiles: undefined,
+      maxDurationMinutes: undefined
+    };
+
+    const candidateResources = includeResources ? filterResources(resources, preDistanceFilters) : [];
+    const candidateStartups = includeStartups ? filterStartups(startups, preDistanceFilters) : [];
+
+    const destinations: MatrixDestination[] = [];
+    if (includeResources) {
+      destinations.push(
+        ...candidateResources.map((resource) => ({
+          id: `resource:${resource.id}`,
+          coordinates: [resource.lng, resource.lat] as [number, number]
+        }))
+      );
+    }
+
+    if (includeStartups) {
+      destinations.push(
+        ...candidateStartups
+          .filter((startup): startup is FounderFlowResponse["startups"][number] & { lat: number; lng: number } =>
+            startup.lat !== null && startup.lng !== null
+          )
+          .map((startup) => ({
+            id: `startup:${startup.id}`,
+            coordinates: [startup.lng, startup.lat] as [number, number]
+          }))
+      );
+    }
+
+    if (destinations.length === 0) {
+      return {
+        filters: {
+          ...baseFilters,
+          maxDistanceMiles: bounds.maxDistanceMiles,
+          maxDurationMinutes: bounds.maxDurationMinutes,
+          nearbyResourceIds: includeResources ? [] : undefined,
+          nearbyStartupIds: includeStartups ? [] : undefined
+        },
+        usedProfileFallback
+      };
+    }
+
+    try {
+      const destinationBatches = chunkDestinations(destinations, ORS_MATRIX_BATCH_SIZE);
+      const collectedRows: MatrixRow[] = [];
+
+      for (const batch of destinationBatches) {
+        const response = await fetch("/api/routing/ors/matrix", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ origin, destinations: batch })
+        });
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const payload = (await response.json()) as {
+          results?: Array<{ id: string; distanceMeters: number; durationSeconds: number }>;
+        };
+
+        const resultRows = Array.isArray(payload.results) ? payload.results : [];
+        collectedRows.push(...resultRows);
+      }
+
+      const matchedResourceIds: string[] = [];
+      const matchedStartupIds: string[] = [];
+
+      for (const row of collectedRows) {
+        if (!row || typeof row.id !== "string") {
+          continue;
+        }
+
+        const distanceMiles = row.distanceMeters / 1609.344;
+        const durationMinutes = row.durationSeconds / 60;
+        const distancePass = bounds.maxDistanceMiles === undefined || distanceMiles <= bounds.maxDistanceMiles;
+        const durationPass = bounds.maxDurationMinutes === undefined || durationMinutes <= bounds.maxDurationMinutes;
+        if (!distancePass || !durationPass) {
+          continue;
+        }
+
+        if (row.id.startsWith("resource:")) {
+          matchedResourceIds.push(row.id.slice("resource:".length));
+          continue;
+        }
+
+        if (row.id.startsWith("startup:")) {
+          matchedStartupIds.push(row.id.slice("startup:".length));
+        }
+      }
+
+      return {
+        filters: {
+          ...baseFilters,
+          maxDistanceMiles: bounds.maxDistanceMiles,
+          maxDurationMinutes: bounds.maxDurationMinutes,
+          nearbyResourceIds: includeResources ? matchedResourceIds : undefined,
+          nearbyStartupIds: includeStartups ? matchedStartupIds : undefined
+        },
+        usedProfileFallback
+      };
+    } catch {
+      return { filters, usedProfileFallback };
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -262,14 +498,20 @@ export function MapChat({
             }
           : filtersWithStateBounds;
       const normalizedFilters = finalFilters ? normalizeIntentFromQuery(userMessage.content, finalFilters) : undefined;
+      const distanceFilterResult = await applyDistanceFilter(userMessage.content, normalizedFilters);
+      const distanceAwareFilters = distanceFilterResult.filters;
       let reply = data.reply as string;
 
-      if (normalizedFilters) {
-        const resourceCount = filterResources(resources, normalizedFilters).length;
-        const startupCount = filterStartups(startups, normalizedFilters).length;
-        const countMessage = buildCountMessage(normalizedFilters, resourceCount, startupCount);
+      if (distanceAwareFilters) {
+        const resourceCount = filterResources(resources, distanceAwareFilters).length;
+        const startupCount = filterStartups(startups, distanceAwareFilters).length;
+        const countMessage = buildCountMessage(distanceAwareFilters, resourceCount, startupCount);
         if (countMessage) {
           reply = countMessage;
+        }
+
+        if (distanceFilterResult.usedProfileFallback) {
+          reply = `${reply} I couldn't access your current location, so I used your saved profile location instead.`;
         }
       }
 
@@ -281,18 +523,13 @@ export function MapChat({
 
       setMessages((prev) => [...prev, assistantMessage]);
 
-      if (normalizedFilters) {
-        setActiveFilters(normalizedFilters);
-        onFilter(normalizedFilters);
+      if (distanceAwareFilters) {
+        setActiveFilters(distanceAwareFilters);
+        onFilter(distanceAwareFilters);
       }
     } catch (error) {
       console.error("Map chat error:", error);
-      const errorMessage: Message = {
-        id: `msg-${Date.now()}-${Math.random()}`,
-        role: "assistant",
-        content: "Sorry, I encountered an error. Please try again."
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      toast.error(error instanceof Error ? error.message : "Sorry, I encountered an error. Please try again.");
     } finally {
       setIsLoading(false);
     }

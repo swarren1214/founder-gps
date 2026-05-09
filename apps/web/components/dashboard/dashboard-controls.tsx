@@ -5,11 +5,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   ArrowLeft,
+  Briefcase,
   Building2,
+  CircleDollarSign,
   Compass,
   ExternalLink,
   MapPin,
   RefreshCw,
+  Rocket,
   Route,
   Search,
   SlidersHorizontal,
@@ -236,33 +239,35 @@ export function DashboardControls({
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Stage</p>
+                <div className="flex items-center gap-1.5 text-sky-700 dark:text-sky-300">
+                  <Rocket className="h-3.5 w-3.5" />
+                  <p className="text-[10px] uppercase tracking-[0.16em]">Stage</p>
+                </div>
                 <p className="mt-1 text-sm font-semibold capitalize">{founderProfile.stage}</p>
               </div>
               <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Industry</p>
+                <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
+                  <Briefcase className="h-3.5 w-3.5" />
+                  <p className="text-[10px] uppercase tracking-[0.16em]">Industry</p>
+                </div>
                 <p className="mt-1 text-sm font-semibold">{founderProfile.industry}</p>
               </div>
               <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Funding status</p>
+                <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                  <CircleDollarSign className="h-3.5 w-3.5" />
+                  <p className="text-[10px] uppercase tracking-[0.16em]">Funding status</p>
+                </div>
                 <p className="mt-1 text-sm font-semibold">{founderProfile.fundingStatus}</p>
               </div>
               <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Location</p>
+                <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-300">
+                  <MapPin className="h-3.5 w-3.5" />
+                  <p className="text-[10px] uppercase tracking-[0.16em]">Location</p>
+                </div>
                 <p className="mt-1 text-sm font-semibold">{founderProfile.locationCity}</p>
               </div>
             </div>
 
-            <div className="mt-3 space-y-3">
-              <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Idea</p>
-                <p className="mt-1 text-sm text-foreground/90">{founderProfile.idea}</p>
-              </div>
-              <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Current challenge</p>
-                <p className="mt-1 text-sm text-foreground/90">{founderProfile.challenge}</p>
-              </div>
-            </div>
           </Card>
 
           <section className="space-y-3 rounded-2xl border border-border/70 bg-background/45 p-4">
@@ -708,7 +713,7 @@ export function DashboardControls({
                   )}
                 </div>
 
-                {warnings.length > 0 || retryError ? (
+                {warnings.length > 0 ? (
                   <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3">
                     <div className="mb-2 flex items-center gap-2">
                       <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -718,18 +723,13 @@ export function DashboardControls({
                       {warnings.map((warning) => (
                         <li key={warning}>{warning}</li>
                       ))}
-                      {retryError ? <li key="retry-error">{retryError}</li> : null}
                     </ul>
                     <Button variant="secondary" size="sm" onClick={onRetry} disabled={isRetrying}>
                       <RefreshCw className={`h-4 w-4 ${isRetrying ? "animate-spin" : ""}`} />
                       {isRetrying ? "Retrying" : "Retry services"}
                     </Button>
                   </div>
-                ) : (
-                  <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">
-                    All services healthy. No active warnings.
-                  </div>
-                )}
+                ) : null}
               </motion.div>
             )}
           </AnimatePresence>
@@ -815,9 +815,6 @@ export function DashboardControls({
                             </p>
                           </div>
                         </div>
-                        <Badge className="bg-secondary/15 text-secondary capitalize">
-                          {selectedResource.category.replaceAll("_", " ")}
-                        </Badge>
                       </div>
                     );
                   })()}

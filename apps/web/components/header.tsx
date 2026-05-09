@@ -1,6 +1,5 @@
 "use client";
 
-import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogOut, Moon, Sun, User } from "lucide-react";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useTheme } from "@/components/theme-provider";
 
 export function Header() {
   const router = useRouter();

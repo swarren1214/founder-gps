@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useTheme } from "next-themes";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { AuthScreenSkeleton } from "@/components/ui/loading-screens";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { getSignedInRedirectTarget } from "@/lib/auth-routing";
+import { useTheme } from "@/components/theme-provider";
 import { Lock, LogIn, Mail, Moon, Sun } from "lucide-react";
 
 export default function LoginPage() {
@@ -33,6 +34,10 @@ export default function LoginPage() {
       router.replace(redirectTarget);
     }
   }, [isAuthenticated, isLoading, router]);
+
+  if (isLoading) {
+    return <AuthScreenSkeleton />;
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

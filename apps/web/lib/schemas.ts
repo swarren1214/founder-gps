@@ -208,6 +208,10 @@ export const mapFilterSchema = z.object({
   startupStageKeywords: z.array(z.string()).optional(),
   employeeMin: z.number().int().positive().optional(),
   employeeMax: z.number().int().positive().optional(),
+  maxDistanceMiles: z.number().positive().optional(),
+  maxDurationMinutes: z.number().positive().optional(),
+  nearbyResourceIds: z.array(z.string()).optional(),
+  nearbyStartupIds: z.array(z.string()).optional(),
   states: z.array(z.string()).optional(),
   clearFilters: z.boolean().optional()
 });

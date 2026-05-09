@@ -5,6 +5,7 @@ import { MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { toast } from "sonner";
 
 type AddressSuggestion = {
   formatted: string;
@@ -140,7 +141,10 @@ export function AddressAutocompleteInput({
         }
 
         setSuggestions([]);
-        setError(fetchError instanceof Error ? fetchError.message : "Address lookup failed.");
+        const message = fetchError instanceof Error ? fetchError.message : "Address lookup failed.";
+        setError(null);
+        setIsOpen(false);
+        toast.error(message);
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false);
@@ -216,10 +220,6 @@ export function AddressAutocompleteInput({
               <Spinner className="size-4" />
               Searching addresses...
             </div>
-          ) : null}
-
-          {!isLoading && error ? (
-            <p className="px-3 py-3 text-sm text-destructive">{error}</p>
           ) : null}
 
           {!isLoading && !error && !hasResults ? (

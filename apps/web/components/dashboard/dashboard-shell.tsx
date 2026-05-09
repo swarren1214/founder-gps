@@ -11,7 +11,9 @@ import { FounderMap } from "@/components/map/founder-map";
 import { DashboardControls } from "@/components/dashboard/dashboard-controls";
 import { MapChat } from "@/components/dashboard/map-chat";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DashboardInlineSkeleton } from "@/components/ui/loading-screens";
 import { useOnboardingGate } from "@/hooks/use-onboarding-gate";
+import { toast } from "sonner";
 
 export function DashboardShell() {
   const router = useRouter();
@@ -63,9 +65,8 @@ export function DashboardShell() {
           return mergedRun;
         });
       } catch (hydrateError) {
-        // Surface the error so the retry UI is shown in DashboardControls.
         const message = hydrateError instanceof Error ? hydrateError.message : "Failed to load startup profiles.";
-        setRetryError((existing) => existing ?? message);
+        toast.error(message);
       }
     };
 
@@ -89,12 +90,7 @@ export function DashboardShell() {
   }, [currentRun]);
 
   if (isLoading) {
-    return (
-      <Card>
-        <CardTitle>Loading dashboard...</CardTitle>
-        <CardDescription className="mt-3">Checking your current founder session.</CardDescription>
-      </Card>
-    );
+    return <DashboardInlineSkeleton />;
   }
 
   if (!isOnboarded || !currentRun) {
@@ -116,34 +112,39 @@ export function DashboardShell() {
     const existingRun = currentRun;
 
     startTransition(async () => {
-      try {
-        setRetryError(null);
-        trackEvent("founder_flow_retry_requested", {
-          city: existingRun.founderProfile.locationCity,
-          topN: existingRun.founderProfile.topN
-        });
+      toast.promise(
+        (async () => {
+          setRetryError(null);
+          trackEvent("founder_flow_retry_requested", {
+            city: existingRun.founderProfile.locationCity,
+            topN: existingRun.founderProfile.topN
+          });
 
-        const response = await fetch("/api/founder-flow", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(existingRun.founderProfile)
-        });
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Retry failed.");
+          const response = await fetch("/api/founder-flow", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(existingRun.founderProfile)
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error ?? "Retry failed.");
+          }
+
+          const parsed = founderFlowResponseSchema.parse(payload);
+          saveDashboardRun(parsed);
+          setCurrentRun(parsed);
+          trackEvent("founder_flow_retry_completed", {
+            warnings: parsed.warnings.length,
+            hasRoute: Boolean(parsed.route),
+            hasRoadmap: Boolean(parsed.roadmap)
+          });
+        })(),
+        {
+          loading: "Regenerating your founder plan...",
+          success: "Founder plan updated.",
+          error: (error) => (error instanceof Error ? error.message : "Retry failed.")
         }
-
-        const parsed = founderFlowResponseSchema.parse(payload);
-        saveDashboardRun(parsed);
-        setCurrentRun(parsed);
-        trackEvent("founder_flow_retry_completed", {
-          warnings: parsed.warnings.length,
-          hasRoute: Boolean(parsed.route),
-          hasRoadmap: Boolean(parsed.roadmap)
-        });
-      } catch (error) {
-        setRetryError(error instanceof Error ? error.message : "Retry failed.");
-      }
+      );
     });
   }
 
@@ -191,6 +192,7 @@ export function DashboardShell() {
       <FounderMap
         showStartupPins={showStartupPins}
         showResourcePins={showResourcePins}
+        activeTab={activeTab}
         className="absolute inset-0 h-full w-full rounded-none"
         resources={resources}
         startups={startups}

@@ -9,9 +9,20 @@ import {
 } from "@/lib/schemas";
 import { getAuthServiceUrl } from "@/lib/auth-service";
 
-const ROADMAP_MODEL = process.env.OPENAI_ROADMAP_MODEL ?? "gpt-4o-mini";
+const ROADMAP_MODEL = process.env.OPENAI_ROADMAP_MODEL ?? process.env.AI_MODEL ?? "gpt-4o-mini";
 const RESOURCE_SERVICE_URL = process.env.NEXT_PUBLIC_RESOURCE_SERVICE_URL ?? "http://localhost:4001";
 const MODEL_TIMEOUT_MS = 20000;
+
+function getChatCompletionsUrl(): string {
+  const rawBaseUrl = (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").trim();
+  const normalizedBase = rawBaseUrl.replace(/\/+$/, "");
+
+  if (/\/v1$/i.test(normalizedBase)) {
+    return `${normalizedBase}/chat/completions`;
+  }
+
+  return `${normalizedBase}/v1/chat/completions`;
+}
 
 function makeTask(title: string, timeframe: "today" | "week" | "month", source: "ai" | "manual"): RoadmapTask {
   const now = new Date().toISOString();
@@ -86,7 +97,7 @@ async function callModelJson(params: {
   const timeoutId = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(getChatCompletionsUrl(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${params.apiKey}`,

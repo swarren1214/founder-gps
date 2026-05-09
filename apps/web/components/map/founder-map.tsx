@@ -5,6 +5,7 @@ import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { MapControls } from "@/components/map/map-controls";
+import { filterResources, filterStartups } from "@/lib/map-filters";
 import { cn } from "@/lib/utils";
 import type { FounderRoute, Recommendation, ResourceCardData, StartupProfileData, MapFilters } from "@/lib/schemas";
 
@@ -19,6 +20,7 @@ type FounderMapProps = {
   selectedStartupId?: string | null;
   selectedResourceId?: string | null;
   onPinSelect?: (pin: { id: string; kind: "startup" | "resource" }) => void;
+  activeTab?: string;
   activeFilters?: MapFilters | null;
   className?: string;
 };
@@ -375,6 +377,7 @@ export function FounderMap({
   selectedStartupId = null,
   selectedResourceId = null,
   onPinSelect,
+  activeTab = "overview",
   activeFilters = null,
   className
 }: FounderMapProps) {
@@ -395,6 +398,46 @@ export function FounderMap({
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [pulseTick, setPulseTick] = useState(0);
+  const [orsRouteCoordinates, setOrsRouteCoordinates] = useState<[number, number][]>([]);
+  const [isRouteHovered, setIsRouteHovered] = useState(false);
+  const [isRouteFocusActive, setIsRouteFocusActive] = useState(false);
+
+  const shouldShowRoadmapRoute = activeTab === "roadmap";
+
+  const routeRequestCoordinates = useMemo<[number, number][]>(() => {
+    const byId = new Map(resources.map((resource) => [resource.id, resource]));
+
+    const orderedWaypoints = recommendations
+      .map((recommendation) => byId.get(recommendation.resourceId))
+      .filter((resource): resource is ResourceCardData => Boolean(resource))
+      .slice(0, 10)
+      .map((resource) => [resource.lng, resource.lat] as [number, number]);
+
+    const coordinates: [number, number][] = [[founderLocation.lng, founderLocation.lat], ...orderedWaypoints];
+
+    const uniqueCoordinates: [number, number][] = [];
+    const seen = new Set<string>();
+    for (const [lng, lat] of coordinates) {
+      const key = `${lng.toFixed(6)},${lat.toFixed(6)}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      uniqueCoordinates.push([lng, lat]);
+    }
+
+    return uniqueCoordinates;
+  }, [founderLocation.lat, founderLocation.lng, recommendations, resources]);
+
+  const routeTargetResourceIds = useMemo(() => {
+    const resourceIds = new Set(resources.map((resource) => resource.id));
+    return new Set(
+      recommendations
+        .slice(0, 10)
+        .map((recommendation) => recommendation.resourceId)
+        .filter((resourceId) => resourceIds.has(resourceId))
+    );
+  }, [recommendations, resources]);
 
   const allPins = useMemo<MapPin[]>(
     () => {
@@ -426,71 +469,21 @@ export function FounderMap({
         return [...baseStartupPins, ...baseResourcePins];
       }
 
-      // Apply filter dimming logic
+      const matchingResourceIds = new Set(filterResources(resources, activeFilters).map((resource) => resource.id));
+      const matchingStartupIds = new Set(filterStartups(startups, activeFilters).map((startup) => startup.id));
+
       if (activeFilters.intent === "filter_resources") {
-        // Dim startup pins, highlight resource pins
-        return [
-          ...baseStartupPins.map((pin) => ({ ...pin, size: 28 })),
-          ...baseResourcePins
-        ];
+        return baseResourcePins.filter((pin) => matchingResourceIds.has(pin.id));
       }
 
       if (activeFilters.intent === "filter_startups") {
-        // Dim resource pins, highlight startup pins
-        return [
-          ...baseStartupPins,
-          ...baseResourcePins.map((pin) => ({ ...pin, size: 28 }))
-        ];
+        return baseStartupPins.filter((pin) => matchingStartupIds.has(pin.id));
       }
 
       if (activeFilters.intent === "filter_both") {
-        // Filter both based on keywords/categories/sectors
-        const matchStartup = (startup: StartupProfileData) => {
-          if (activeFilters.sectors && activeFilters.sectors.length > 0) {
-            const sectorMatch = activeFilters.sectors.some(
-              (sector) => startup.sector?.toLowerCase().includes(sector.toLowerCase())
-            );
-            if (!sectorMatch) return false;
-          }
-          if (activeFilters.keywords && activeFilters.keywords.length > 0) {
-            const keywordMatch = activeFilters.keywords.some(
-              (keyword) =>
-                startup.name.toLowerCase().includes(keyword.toLowerCase()) ||
-                startup.description?.toLowerCase().includes(keyword.toLowerCase())
-            );
-            if (!keywordMatch) return false;
-          }
-          return true;
-        };
-
-        const matchResource = (resource: ResourceCardData) => {
-          if (activeFilters.resourceCategories && activeFilters.resourceCategories.length > 0) {
-            const categoryMatch = activeFilters.resourceCategories.includes(resource.category);
-            if (!categoryMatch) return false;
-          }
-          if (activeFilters.keywords && activeFilters.keywords.length > 0) {
-            const keywordMatch = activeFilters.keywords.some(
-              (keyword) =>
-                resource.name.toLowerCase().includes(keyword.toLowerCase()) ||
-                resource.description.toLowerCase().includes(keyword.toLowerCase()) ||
-                resource.tags.some((tag) => tag.toLowerCase().includes(keyword.toLowerCase()))
-            );
-            if (!keywordMatch) return false;
-          }
-          return true;
-        };
-
         return [
-          ...baseStartupPins.map((pin) => {
-            const startup = startups.find((s) => s.id === pin.id);
-            const matches = startup && matchStartup(startup);
-            return { ...pin, size: matches ? pin.size : 28 };
-          }),
-          ...baseResourcePins.map((pin) => {
-            const resource = resources.find((r) => r.id === pin.id);
-            const matches = resource && matchResource(resource);
-            return { ...pin, size: matches ? pin.size : 28 };
-          })
+          ...baseStartupPins.filter((pin) => matchingStartupIds.has(pin.id)),
+          ...baseResourcePins.filter((pin) => matchingResourceIds.has(pin.id))
         ];
       }
 
@@ -510,19 +503,27 @@ export function FounderMap({
     ]
   );
 
+  const visiblePins = useMemo(() => {
+    if (!isRouteFocusActive) {
+      return allPins;
+    }
+
+    return allPins.filter((pin) => pin.kind === "resource" && routeTargetResourceIds.has(pin.id));
+  }, [allPins, isRouteFocusActive, routeTargetResourceIds]);
+
   const clusteredPins = useMemo(() => {
     const map = instanceRef.current;
-    if (!map || allPins.length === 0) {
-      return { clusters: [] as PinCluster[], singles: allPins };
+    if (!map || visiblePins.length === 0) {
+      return { clusters: [] as PinCluster[], singles: visiblePins };
     }
 
     // At closer zoom levels, show individual pins instead of forcing cluster bubbles.
     if (map.getZoom() >= CLUSTER_DISABLE_ZOOM) {
-      return { clusters: [] as PinCluster[], singles: allPins };
+      return { clusters: [] as PinCluster[], singles: visiblePins };
     }
 
-    return clusterPins(allPins, map);
-  }, [allPins, mapRevision]);
+    return clusterPins(visiblePins, map);
+  }, [mapRevision, visiblePins]);
 
   const selectedPinIds = useMemo(() => {
     const ids = new Set<string>();
@@ -558,6 +559,55 @@ export function FounderMap({
       window.clearInterval(interval);
     };
   }, [userLocation]);
+
+  useEffect(() => {
+    if (!shouldShowRoadmapRoute) {
+      setOrsRouteCoordinates([]);
+      setIsRouteHovered(false);
+      setIsRouteFocusActive(false);
+      return;
+    }
+
+    if (routeRequestCoordinates.length < 2) {
+      setOrsRouteCoordinates([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/routing/ors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ coordinates: routeRequestCoordinates })
+        });
+
+        const payload = (await response.json()) as {
+          coordinates?: [number, number][];
+        };
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setOrsRouteCoordinates([]);
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setOrsRouteCoordinates(Array.isArray(payload.coordinates) ? payload.coordinates : []);
+        }
+      } catch {
+        if (!cancelled) {
+          setOrsRouteCoordinates([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeRequestCoordinates, shouldShowRoadmapRoute]);
 
   useEffect(() => {
     let cancelled = false;
@@ -738,13 +788,36 @@ export function FounderMap({
       return;
     }
 
-    const routeCoordinates = route?.geojson.features[0]?.geometry.coordinates ?? [];
+    const routeCoordinates = shouldShowRoadmapRoute ? orsRouteCoordinates : [];
     const pulseProgress = (pulseTick % 18) / 18;
     const pulseRadius = 35 + pulseProgress * 115;
     const pulseAlpha = Math.max(20, Math.round((1 - pulseProgress) * 125));
+    const routeLineWidthPx = isRouteHovered ? 13 : 7;
 
     overlay.setProps({
       layers: [
+        new PathLayer<{ path: [number, number][] }>({
+          id: "route-line-layer",
+          data: routeCoordinates.length > 1 ? [{ path: routeCoordinates }] : [],
+          getPath: (item: { path: [number, number][] }) => item.path,
+          getColor: [67, 167, 157, 230],
+          getWidth: routeLineWidthPx,
+          widthUnits: "pixels",
+          pickable: true,
+          onHover: ({ object }: { object: unknown }) => {
+            setIsRouteHovered(Boolean(object));
+          },
+          onClick: ({ object }: { object: unknown }) => {
+            if (!object) {
+              return;
+            }
+
+            setIsRouteFocusActive((value) => !value);
+          },
+          updateTriggers: {
+            getWidth: routeLineWidthPx
+          }
+        } as unknown as ConstructorParameters<typeof PathLayer<{ path: [number, number][] }>>[0]),
         new ScatterplotLayer({
           id: "founder-location-layer",
           data: [{ position: [founderLocation.lng, founderLocation.lat], city: founderLocation.city }],
@@ -913,29 +986,25 @@ export function FounderMap({
               })
             ]
           : []),
-        new PathLayer({
-          id: "route-line-layer",
-          data: routeCoordinates.length > 1 ? [{ path: routeCoordinates }] : [],
-          getPath: (item: { path: [number, number][] }) => item.path,
-          getColor: [255, 122, 26, 230],
-          getWidth: 8,
-          widthUnits: "pixels"
-        })
       ]
     });
   }, [
+    activeTab,
     founderLocation.city,
     founderLocation.lat,
     founderLocation.lng,
     clusteredPins,
     hoveredPinId,
+    isRouteHovered,
     onPinSelect,
     pulseTick,
     regularSinglePins,
-    route,
+    routeTargetResourceIds,
+    orsRouteCoordinates,
     selectedSinglePins,
     showStartupPins,
     showResourcePins,
+    shouldShowRoadmapRoute,
     userLocation
   ]);
 

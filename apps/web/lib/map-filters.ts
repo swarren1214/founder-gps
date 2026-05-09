@@ -42,6 +42,13 @@ export function filterResources(resources: ResourceCardData[], filters: MapFilte
   }
 
   return resources.filter((resource) => {
+    if (filters.nearbyResourceIds !== undefined) {
+      const nearbyMatch = filters.nearbyResourceIds.includes(resource.id);
+      if (!nearbyMatch) {
+        return false;
+      }
+    }
+
     if (filters.resourceCategories && filters.resourceCategories.length > 0) {
       const categoryMatch = filters.resourceCategories.includes(resource.category);
       if (!categoryMatch) {
@@ -78,6 +85,13 @@ export function filterStartups(startups: StartupProfileData[], filters: MapFilte
   }
 
   return startups.filter((startup) => {
+    if (filters.nearbyStartupIds !== undefined) {
+      const nearbyMatch = filters.nearbyStartupIds.includes(startup.id);
+      if (!nearbyMatch) {
+        return false;
+      }
+    }
+
     if (filters.states && filters.states.length > 0) {
       const address = startup.address?.toLowerCase() ?? "";
       const stateMatch = filters.states.some((state) => {

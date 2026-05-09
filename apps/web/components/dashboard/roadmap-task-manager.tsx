@@ -23,10 +23,17 @@ import { Button } from "@/components/ui/button";
 import { CardDescription } from "@/components/ui/card";
 import type { FounderFlowResponse, RoadmapGenerateResponse, RoadmapTask, RoadmapTaskPlan } from "@/lib/schemas";
 import { roadmapGenerateResponseSchema } from "@/lib/schemas";
+import { toast } from "sonner";
 
 type Timeframe = "today" | "week" | "month";
 
 const TIMEFRAME_ORDER: Timeframe[] = ["today", "week", "month"];
+
+const SKELETON_TASK_COUNT: Record<Timeframe, number> = {
+  today: 3,
+  week: 5,
+  month: 4
+};
 
 const TIMEFRAME_META: Record<
   Timeframe,
@@ -167,6 +174,19 @@ function SortableTaskItem({
   );
 }
 
+function TaskSkeletonItem() {
+  return (
+    <div className="rounded-xl border border-border/70 bg-background/85 p-3">
+      <div className="flex items-center gap-3">
+        <div className="h-4 w-4 rounded bg-muted animate-pulse" />
+        <div className="h-4 w-4 rounded bg-muted animate-pulse" />
+        <div className="h-4 flex-1 rounded bg-muted animate-pulse" />
+        <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
 export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
   const [plan, setPlan] = useState<RoadmapTaskPlan>(() => buildInitialPlan(run));
   const [newTaskTitle, setNewTaskTitle] = useState<Record<Timeframe, string>>({ today: "", week: "", month: "" });
@@ -274,7 +294,9 @@ export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
         throw new Error("Unable to save roadmap tasks.");
       }
     } catch (persistError) {
-      setError(persistError instanceof Error ? persistError.message : "Unable to save roadmap tasks.");
+      const message = persistError instanceof Error ? persistError.message : "Unable to save roadmap tasks.";
+      setError(message);
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }
@@ -289,31 +311,44 @@ export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
     setError(null);
     setIsGenerating(true);
 
-    try {
-      const response = await fetch("/api/roadmap/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          founderProfile: run.founderProfile,
-          analysis: run.analysis,
-          recommendations: run.recommendations,
-          resources: run.resources,
-          startups: run.startups
-        })
-      });
+    const request = async () => {
+      try {
+        const response = await fetch("/api/roadmap/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            founderProfile: run.founderProfile,
+            analysis: run.analysis,
+            recommendations: run.recommendations,
+            resources: run.resources,
+            startups: run.startups
+          })
+        });
 
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Roadmap generation failed.");
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Roadmap generation failed.");
+        }
+
+        const parsed = roadmapGenerateResponseSchema.parse(payload as RoadmapGenerateResponse);
+        setPlan(parsed.plan);
+        await persistPlan(parsed.plan);
+      } finally {
+        setIsGenerating(false);
       }
+    };
 
-      const parsed = roadmapGenerateResponseSchema.parse(payload as RoadmapGenerateResponse);
-      updatePlan(parsed.plan);
-    } catch (generateError) {
-      setError(generateError instanceof Error ? generateError.message : "Unable to generate roadmap.");
-    } finally {
-      setIsGenerating(false);
-    }
+    toast.promise(request(),
+      {
+        loading: "Generating a fresh roadmap...",
+        success: "Roadmap refreshed.",
+        error: (generateError) => {
+          const message = generateError instanceof Error ? generateError.message : "Unable to generate roadmap.";
+          setError(message);
+          return message;
+        }
+      }
+    );
   }
 
   function toggleTask(timeframe: Timeframe, id: string) {
@@ -370,7 +405,13 @@ export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
     };
 
     setNewTaskTitle((current) => ({ ...current, [timeframe]: "" }));
-    updatePlan(nextPlan);
+    setPlan(nextPlan);
+
+    toast.promise(persistPlan(nextPlan), {
+      loading: "Saving new task...",
+      success: "Task added.",
+      error: (persistError) => (persistError instanceof Error ? persistError.message : "Unable to save roadmap tasks.")
+    });
   }
 
   function handleDragEnd(timeframe: Timeframe, event: DragEndEvent) {
@@ -417,8 +458,8 @@ export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
         </div>
       </div>
 
-      {error ? <CardDescription className="text-destructive">{error}</CardDescription> : null}
       {isSaving ? <CardDescription>Saving roadmap changes...</CardDescription> : null}
+      {isGenerating ? <CardDescription>Generating a fresh roadmap...</CardDescription> : null}
 
       {TIMEFRAME_ORDER.map((timeframe) => (
         <div key={timeframe} className="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
@@ -441,33 +482,41 @@ export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
           </div>
 
           <div className="space-y-2.5">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={(event) => handleDragEnd(timeframe, event)}
-            >
-              <SortableContext
-                items={plan[timeframe].map((t) => t.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {plan[timeframe].map((task) => (
-                  <SortableTaskItem
-                    key={task.id}
-                    task={task}
-                    timeframe={timeframe}
-                    onToggle={toggleTask}
-                    onEdit={editTask}
-                    onDelete={deleteTask}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
+            {isGenerating ? (
+              Array.from({ length: SKELETON_TASK_COUNT[timeframe] }).map((_, index) => (
+                <TaskSkeletonItem key={`${timeframe}-skeleton-${index}`} />
+              ))
+            ) : (
+              <>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event) => handleDragEnd(timeframe, event)}
+                >
+                  <SortableContext
+                    items={plan[timeframe].map((t) => t.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {plan[timeframe].map((task) => (
+                      <SortableTaskItem
+                        key={task.id}
+                        task={task}
+                        timeframe={timeframe}
+                        onToggle={toggleTask}
+                        onEdit={editTask}
+                        onDelete={deleteTask}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
 
-            {plan[timeframe].length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/80 bg-background/50 p-3 text-sm text-muted-foreground">
-                No tasks yet for this timeframe.
-              </div>
-            ) : null}
+                {plan[timeframe].length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border/80 bg-background/50 p-3 text-sm text-muted-foreground">
+                    No tasks yet for this timeframe.
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
 
           <div className="mt-3 flex items-center gap-2">
@@ -480,6 +529,7 @@ export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
                 }))
               }
               placeholder="Add a new task"
+              disabled={isGenerating}
               className="h-10 flex-1 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring/30"
             />
             <Button
@@ -487,6 +537,7 @@ export function RoadmapTaskManager({ run }: { run: FounderFlowResponse }) {
               variant="outline"
               size="icon"
               onClick={() => addTask(timeframe)}
+              disabled={isGenerating}
               className="h-10 w-10 p-4"
             >
               <Plus className="h-4 w-4" />
