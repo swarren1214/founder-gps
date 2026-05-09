@@ -262,30 +262,32 @@ export async function POST(request: Request) {
 
     // Step 4: Generate route (optional, failures logged as warnings)
     let route = null;
-    try {
-      const routeResponse = await fetchWithTimeout(
-        `${serviceConfig.routing}/routing/founder-path`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            origin: {
-              city: founderProfile.locationCity,
-              lat: founderProfile.locationLat,
-              lng: founderProfile.locationLng
-            },
-            resources: selectedResources,
-            topN: founderProfile.topN,
-            roundtrip: false
-          }),
-          timeout: 8000
-        },
-        requestId
-      );
-      route = await parseJson(routeResponse);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : "Routing service unavailable";
-      warnings.push(`⚠️ Routing unavailable: ${errorMsg}. Map visualization may be limited.`);
+    if (serviceConfig.routing) {
+      try {
+        const routeResponse = await fetchWithTimeout(
+          `${serviceConfig.routing}/routing/founder-path`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              origin: {
+                city: founderProfile.locationCity,
+                lat: founderProfile.locationLat,
+                lng: founderProfile.locationLng
+              },
+              resources: selectedResources,
+              topN: founderProfile.topN,
+              roundtrip: false
+            }),
+            timeout: 8000
+          },
+          requestId
+        );
+        route = await parseJson(routeResponse);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Routing service unavailable";
+        warnings.push(`⚠️ Routing unavailable: ${errorMsg}. Map visualization may be limited.`);
+      }
     }
 
     // Step 5: Generate roadmap (optional, failures logged as warnings)

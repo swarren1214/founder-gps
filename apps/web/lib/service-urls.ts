@@ -13,8 +13,8 @@ export function getResourceServiceUrl(): string {
   return readEnv("RESOURCE_SERVICE_URL", "NEXT_PUBLIC_RESOURCE_SERVICE_URL") ?? "http://localhost:4001";
 }
 
-export function getRoutingServiceUrl(): string {
-  return readEnv("ROUTING_SERVICE_URL", "NEXT_PUBLIC_ROUTING_SERVICE_URL") ?? "http://localhost:4002";
+export function getRoutingServiceUrl(): string | undefined {
+  return readEnv("ROUTING_SERVICE_URL", "NEXT_PUBLIC_ROUTING_SERVICE_URL");
 }
 
 export function getIntelligenceServiceUrl(): string {

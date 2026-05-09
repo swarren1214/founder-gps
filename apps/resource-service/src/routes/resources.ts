@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FOUNDER_STAGES, RESOURCE_CATEGORIES } from "@founder-gps/shared-types";
 import { sendApiError } from "@founder-gps/shared-types";
+import type { CreateStartupProfileInput, StartupOnboardingContext } from "@founder-gps/shared-types";
 import type { FastifyInstance } from "fastify";
 import type { ResourceRepository } from "../repository.js";
 
@@ -73,7 +74,16 @@ export async function resourceRoutes(app: FastifyInstance, repository: ResourceR
     }
 
     try {
-      const startup = await repository.createStartup(parsed.data);
+      const onboardingContext = parsed.data.onboardingContext
+        ? ({ schemaVersion: 1, ...parsed.data.onboardingContext } as StartupOnboardingContext)
+        : undefined;
+
+      const startupInput: CreateStartupProfileInput = {
+        ...parsed.data,
+        onboardingContext
+      };
+
+      const startup = await repository.createStartup(startupInput);
       return reply.status(201).send(startup);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create startup profile.";
