@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
+  founderFlowResponseSchema,
   founderIntakeSchema,
   onboardingInterviewResponseSchema,
   type FounderIntake,
+  type FounderFlowResponse,
   type OnboardingInterviewResponse
 } from "@/lib/schemas";
 import { trackEvent } from "@/lib/analytics";
@@ -497,18 +499,50 @@ export function FounderIntakeForm() {
 
         setSubmissionPhase(1);
 
-        const response = await fetch("/api/founder-flow", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(parsed.data)
-        });
+        let dashboardRun: FounderFlowResponse;
+        try {
+          const response = await fetch("/api/founder-flow", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(parsed.data)
+          });
 
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.error?.formErrors?.join(" ") ?? payload.error ?? "Founder flow failed.");
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error?.formErrors?.join(" ") ?? payload.error ?? "Founder flow failed.");
+          }
+
+          dashboardRun = founderFlowResponseSchema.parse(payload);
+        } catch (founderFlowError) {
+          const warningMessage = founderFlowError instanceof Error
+            ? founderFlowError.message
+            : "Founder flow failed.";
+
+          dashboardRun = founderFlowResponseSchema.parse({
+            founderProfile: parsed.data,
+            analysis: {
+              stage: parsed.data.stage,
+              primaryNeeds: ["Complete founder onboarding"],
+              secondaryNeeds: [],
+              industry: parsed.data.industry,
+              founderType: "general",
+              confidenceScore: 0,
+              suggestedFocus: "Review and refine your founder profile details.",
+              risks: [warningMessage]
+            },
+            recommendations: [],
+            route: null,
+            roadmap: null,
+            resources: [],
+            startups: [],
+            warnings: [
+              `⚠️ We could not generate recommendations yet: ${warningMessage}`,
+              "You can regenerate your founder plan from the dashboard."
+            ]
+          });
         }
 
-        saveDashboardRun(payload);
+        saveDashboardRun(dashboardRun);
 
         setSubmissionPhase(2);
 
@@ -543,43 +577,59 @@ export function FounderIntakeForm() {
         const employeeCount = form.companySize ? parseInt(form.companySize, 10) : null;
         const yearFounded = form.dateFounded ? new Date(form.dateFounded).getFullYear() : null;
 
-        await Promise.all([
-          fetch("/api/auth/profile", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              firstName: form.firstName || null,
-              lastName: form.lastName || null,
-              companyName: form.companyName || null,
-              locationCity: form.address || null,
-              onboardingContext,
-              onboardingStatus: "completed"
-            })
-          }),
-          fetch("/api/startups", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: form.companyName,
-              website: form.website || null,
-              employees: Number.isFinite(employeeCount) ? employeeCount : null,
-              yearFounded: Number.isFinite(yearFounded) ? yearFounded : null,
-              description: form.description || null,
-              address: form.address || null,
-              stage: form.stage || null,
-              dateFounded: form.dateFounded || null,
-              phone: form.phone || null,
-              onboardingContext
-            })
+        const profileResponse = await fetch("/api/auth/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            firstName: form.firstName || null,
+            lastName: form.lastName || null,
+            companyName: form.companyName || null,
+            locationCity: form.address || null,
+            onboardingContext,
+            onboardingStatus: "completed"
           })
-        ]);
+        });
+
+        const profilePayload = await profileResponse.json().catch(() => ({}));
+        if (!profileResponse.ok) {
+          throw new Error(
+            profilePayload?.error?.message ??
+            profilePayload?.error ??
+            "Unable to save onboarding profile."
+          );
+        }
+
+        const startupResponse = await fetch("/api/startups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.companyName,
+            website: form.website || null,
+            employees: Number.isFinite(employeeCount) ? employeeCount : null,
+            yearFounded: Number.isFinite(yearFounded) ? yearFounded : null,
+            description: form.description || null,
+            address: form.address || null,
+            stage: form.stage || null,
+            dateFounded: form.dateFounded || null,
+            phone: form.phone || null,
+            onboardingContext
+          })
+        });
+
+        if (!startupResponse.ok) {
+          const startupPayload = await startupResponse.json().catch(() => ({}));
+          console.warn(
+            "Startup profile creation failed:",
+            startupPayload?.error?.message ?? startupPayload?.error ?? "Failed to create startup profile."
+          );
+        }
 
         setSubmissionPhase(3);
 
         trackEvent("founder_flow_completed", {
-          recommendations: payload.recommendations.length,
-          hasRoute: Boolean(payload.route),
-          hasRoadmap: Boolean(payload.roadmap)
+          recommendations: dashboardRun.recommendations.length,
+          hasRoute: Boolean(dashboardRun.route),
+          hasRoadmap: Boolean(dashboardRun.roadmap)
         });
 
         setSubmissionPhase(4);
