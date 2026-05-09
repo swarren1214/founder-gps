@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 
 const REQUIRED_SERVICES = ["postgres", "osrm"];
-const DEV_PORTS = [3000, 3001, 3002, 4001, 4002, 4003, 4004];
+const DEV_PORTS = [3000, 3001, 3002, 4001, 4002, 4003, 4004, 4005];
 
 function runSync(command, args, options = {}) {
   return spawnSync(command, args, {

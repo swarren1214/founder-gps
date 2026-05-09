@@ -44,6 +44,8 @@ export function FounderIntakeForm() {
   const [isPending, startTransition] = useTransition();
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState<FounderIntake>(defaultValue);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [selectedPresetLabel, setSelectedPresetLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,6 +100,20 @@ export function FounderIntakeForm() {
           topN: form.topN
         });
 
+        if (avatarFile) {
+          const avatarPayload = new FormData();
+          avatarPayload.append("avatar", avatarFile);
+          const avatarResponse = await fetch("/api/auth/avatar", {
+            method: "POST",
+            body: avatarPayload
+          });
+
+          const avatarJson = await avatarResponse.json();
+          if (!avatarResponse.ok) {
+            throw new Error(avatarJson?.error?.message ?? avatarJson?.error ?? "Avatar upload failed.");
+          }
+        }
+
         const response = await fetch("/api/founder-flow", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -110,12 +126,20 @@ export function FounderIntakeForm() {
         }
 
         saveDashboardRun(payload);
+        await fetch("/api/auth/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            locationCity: form.locationCity,
+            onboardingStatus: "completed"
+          })
+        });
         trackEvent("founder_flow_completed", {
           recommendations: payload.recommendations.length,
           hasRoute: Boolean(payload.route),
           hasRoadmap: Boolean(payload.roadmap)
         });
-        router.push("/dashboard");
+        router.push("/authed/dashboard");
       } catch (submissionError) {
         setError(submissionError instanceof Error ? submissionError.message : "Unable to complete founder flow.");
       }
@@ -253,6 +277,32 @@ export function FounderIntakeForm() {
 
           {stepIndex === 2 ? (
             <>
+              <div className="md:col-span-2">
+                <Label htmlFor="avatarUpload">Profile avatar</Label>
+                <Input
+                  id="avatarUpload"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={(event) => {
+                    const nextFile = event.target.files?.[0] ?? null;
+                    setAvatarFile(nextFile);
+                    if (!nextFile) {
+                      setAvatarPreviewUrl(null);
+                      return;
+                    }
+
+                    const nextUrl = URL.createObjectURL(nextFile);
+                    setAvatarPreviewUrl(nextUrl);
+                  }}
+                />
+                {avatarPreviewUrl ? (
+                  <img
+                    src={avatarPreviewUrl}
+                    alt="Avatar preview"
+                    className="mt-3 h-16 w-16 rounded-full object-cover"
+                  />
+                ) : null}
+              </div>
               <div>
                 <Label htmlFor="category">Priority resource category</Label>
                 <select id="category" className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/25" value={form.category} onChange={(event) => updateField("category", event.target.value as FounderIntake["category"])}>

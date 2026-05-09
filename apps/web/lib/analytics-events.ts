@@ -18,6 +18,22 @@ export const analyticsEventTaxonomy = {
   founder_flow_retry_completed: {
     description: "Retry request completed",
     expectedPayloadKeys: ["warnings", "hasRoute", "hasRoadmap"]
+  },
+  user_registered: {
+    description: "New user completed registration",
+    expectedPayloadKeys: ["method"]
+  },
+  user_logged_in: {
+    description: "Existing user completed login",
+    expectedPayloadKeys: ["method"]
+  },
+  user_logged_out: {
+    description: "User logged out",
+    expectedPayloadKeys: []
+  },
+  onboarding_completed: {
+    description: "User completed the onboarding flow",
+    expectedPayloadKeys: ["hasAvatar"]
   }
 } as const;
 

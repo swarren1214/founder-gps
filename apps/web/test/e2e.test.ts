@@ -327,3 +327,300 @@ describe("Founder GPS E2E Tests", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Auth Service E2E Tests
+// ---------------------------------------------------------------------------
+
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || "http://localhost:4005";
+const AUTH_COOKIE_NAME = "fg_session";
+
+function extractSetCookieValue(header: string | null, name: string): string | null {
+  if (!header) return null;
+  const match = header.match(new RegExp(`${name}=([^;]+)`));
+  return match?.[1] ?? null;
+}
+
+describe("Auth Service E2E", () => {
+  const uniqueEmail = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+
+  describe("Health", () => {
+    it("auth-service health endpoint returns ok", async () => {
+      const response = await fetch(`${AUTH_SERVICE_URL}/health`);
+      expect(response.ok).toBe(true);
+      const body = await response.json();
+      expect(body.ok).toBe(true);
+    });
+  });
+
+  describe("Registration flow", () => {
+    it("registers a new user and returns authenticated user payload with session cookie", async () => {
+      const email = uniqueEmail();
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "securepassword1", displayName: "E2E Founder" })
+      });
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.user.email).toBe(email);
+      expect(body.profile.displayName).toBe("E2E Founder");
+      expect(body.profile.onboardingStatus).toBe("not_started");
+      expect(body.user.passwordHash).toBeUndefined();
+
+      const cookie = response.headers.get("set-cookie");
+      const token = extractSetCookieValue(cookie, AUTH_COOKIE_NAME);
+      expect(token).toBeTruthy();
+    });
+
+    it("rejects duplicate registration for the same email", async () => {
+      const email = uniqueEmail();
+      const payload = { email, password: "securepassword1", displayName: "Dup User" };
+
+      const first = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      expect(first.status).toBe(200);
+
+      const second = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      expect(second.status).toBe(409);
+    });
+
+    it("rejects registration with missing fields", async () => {
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: uniqueEmail() })
+      });
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe("Login flow", () => {
+    it("logs in with valid credentials and returns a session cookie", async () => {
+      const email = uniqueEmail();
+      const password = "securepassword1";
+
+      await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, displayName: "Login Founder" })
+      });
+
+      const loginResponse = await fetch(`${AUTH_SERVICE_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+
+      expect(loginResponse.status).toBe(200);
+      const body = await loginResponse.json();
+      expect(body.user.email).toBe(email);
+      const cookie = loginResponse.headers.get("set-cookie");
+      expect(extractSetCookieValue(cookie, AUTH_COOKIE_NAME)).toBeTruthy();
+    });
+
+    it("rejects login with wrong password", async () => {
+      const email = uniqueEmail();
+      await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "correctpassword1", displayName: "Wrong Pwd User" })
+      });
+
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "wrongpassword1" })
+      });
+      expect(response.status).toBe(401);
+    });
+  });
+
+  describe("Protected endpoints", () => {
+    async function registerAndGetToken(email: string): Promise<string> {
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "securepassword1", displayName: "Protected User" })
+      });
+      const cookie = response.headers.get("set-cookie");
+      return extractSetCookieValue(cookie, AUTH_COOKIE_NAME) ?? "";
+    }
+
+    it("GET /auth/me returns 401 without a session token", async () => {
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/me`);
+      expect(response.status).toBe(401);
+    });
+
+    it("GET /auth/me returns 401 with an invalid session token", async () => {
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/me`, {
+        headers: { cookie: `${AUTH_COOKIE_NAME}=invalid-token-value` }
+      });
+      expect(response.status).toBe(401);
+    });
+
+    it("GET /auth/me returns the authenticated user after registration", async () => {
+      const email = uniqueEmail();
+      const token = await registerAndGetToken(email);
+
+      const meResponse = await fetch(`${AUTH_SERVICE_URL}/auth/me`, {
+        headers: { cookie: `${AUTH_COOKIE_NAME}=${token}` }
+      });
+
+      expect(meResponse.status).toBe(200);
+      const body = await meResponse.json();
+      expect(body.user.email).toBe(email);
+      expect(body.profile).toBeDefined();
+    });
+
+    it("PATCH /profile persists profile updates and marks onboarding completed", async () => {
+      const email = uniqueEmail();
+      const token = await registerAndGetToken(email);
+
+      const patchResponse = await fetch(`${AUTH_SERVICE_URL}/profile`, {
+        method: "PATCH",
+        headers: {
+          cookie: `${AUTH_COOKIE_NAME}=${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          displayName: "Updated Name",
+          locationCity: "Lehi",
+          companyName: "Acme Startup",
+          onboardingStatus: "completed"
+        })
+      });
+
+      expect(patchResponse.status).toBe(200);
+      const body = await patchResponse.json();
+      expect(body.profile.displayName).toBe("Updated Name");
+      expect(body.profile.locationCity).toBe("Lehi");
+      expect(body.profile.companyName).toBe("Acme Startup");
+      expect(body.profile.onboardingStatus).toBe("completed");
+      expect(body.profile.onboardingCompletedAt).not.toBeNull();
+    });
+
+    it("PATCH /profile returns 401 without session", async () => {
+      const response = await fetch(`${AUTH_SERVICE_URL}/profile`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Hacker" })
+      });
+      expect(response.status).toBe(401);
+    });
+  });
+
+  describe("Logout flow", () => {
+    it("POST /auth/logout invalidates the session and subsequent /auth/me returns 401", async () => {
+      const email = uniqueEmail();
+      const registerResponse = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "securepassword1", displayName: "Logout User" })
+      });
+      const token = extractSetCookieValue(registerResponse.headers.get("set-cookie"), AUTH_COOKIE_NAME);
+      expect(token).toBeTruthy();
+
+      const logoutResponse = await fetch(`${AUTH_SERVICE_URL}/auth/logout`, {
+        method: "POST",
+        headers: { cookie: `${AUTH_COOKIE_NAME}=${token}` }
+      });
+      expect(logoutResponse.status).toBe(200);
+
+      const meResponse = await fetch(`${AUTH_SERVICE_URL}/auth/me`, {
+        headers: { cookie: `${AUTH_COOKIE_NAME}=${token}` }
+      });
+      expect(meResponse.status).toBe(401);
+    });
+
+    it("POST /auth/logout returns ok even without a session cookie", async () => {
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/logout`, { method: "POST" });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.ok).toBe(true);
+    });
+  });
+
+  describe("Avatar upload flow", () => {
+    it("uploads an avatar, reads it back, and deletes it", async () => {
+      const email = uniqueEmail();
+      const registerResponse = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "securepassword1", displayName: "Avatar E2E User" })
+      });
+      const token = extractSetCookieValue(registerResponse.headers.get("set-cookie"), AUTH_COOKIE_NAME);
+
+      // Build a minimal valid PNG (1x1 pixel)
+      const minimalPng = Buffer.from(
+        "89504e470d0a1a0a0000000d49484452000000010000000108020000009001" +
+        "2e000000000c4944415408d76360f8cfc000000002000134e3d900000000049454e44ae426082",
+        "hex"
+      );
+      const boundary = `----boundary${Date.now()}`;
+      const body = Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="avatar"; filename="test.png"\r\nContent-Type: image/png\r\n\r\n`, "utf8"),
+        minimalPng,
+        Buffer.from(`\r\n--${boundary}--\r\n`, "utf8")
+      ]);
+
+      const uploadResponse = await fetch(`${AUTH_SERVICE_URL}/profile/avatar`, {
+        method: "POST",
+        headers: {
+          cookie: `${AUTH_COOKIE_NAME}=${token}`,
+          "content-type": `multipart/form-data; boundary=${boundary}`
+        },
+        body
+      });
+
+      expect(uploadResponse.status).toBe(200);
+      const uploadBody = await uploadResponse.json();
+      expect(uploadBody.profile.avatarUrl).toBeTruthy();
+      const storageKey = uploadBody.profile.avatarStorageKey;
+      expect(storageKey).toBeTruthy();
+
+      const readResponse = await fetch(`${AUTH_SERVICE_URL}/profile/avatar/${storageKey}`);
+      expect(readResponse.status).toBe(200);
+      expect(readResponse.headers.get("content-type")).toContain("image/png");
+
+      const deleteResponse = await fetch(`${AUTH_SERVICE_URL}/profile/avatar`, {
+        method: "DELETE",
+        headers: { cookie: `${AUTH_COOKIE_NAME}=${token}` }
+      });
+      expect(deleteResponse.status).toBe(200);
+      const deleteBody = await deleteResponse.json();
+      expect(deleteBody.profile.avatarUrl).toBeNull();
+    });
+
+    it("rejects non-image uploads with 400", async () => {
+      const email = uniqueEmail();
+      const registerResponse = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "securepassword1", displayName: "Bad Upload User" })
+      });
+      const token = extractSetCookieValue(registerResponse.headers.get("set-cookie"), AUTH_COOKIE_NAME);
+
+      const boundary = `----boundary${Date.now()}`;
+      const body = `--${boundary}\r\nContent-Disposition: form-data; name="avatar"; filename="file.txt"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--${boundary}--\r\n`;
+
+      const response = await fetch(`${AUTH_SERVICE_URL}/profile/avatar`, {
+        method: "POST",
+        headers: {
+          cookie: `${AUTH_COOKIE_NAME}=${token}`,
+          "content-type": `multipart/form-data; boundary=${boundary}`
+        },
+        body
+      });
+      expect(response.status).toBe(400);
+    });
+  });
+});

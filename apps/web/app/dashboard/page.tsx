@@ -1,9 +1,5 @@
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { redirect } from "next/navigation";
 
 export default function DashboardPage() {
-  return (
-    <main className="h-full overflow-hidden">
-      <DashboardShell />
-    </main>
-  );
+  redirect("/authed/dashboard");
 }

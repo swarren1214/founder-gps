@@ -73,7 +73,7 @@ export function DashboardShell() {
 
   useEffect(() => {
     if (!isLoading && !isOnboarded) {
-      router.replace("/onboarding");
+      router.replace("/authed/onboarding");
     }
   }, [isLoading, isOnboarded, router]);
 

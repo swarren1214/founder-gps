@@ -1,13 +1,10 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { redirect } from "next/navigation";
 import { ArrowRight, MapPinned, Route, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { useOnboardingGate } from "@/hooks/use-onboarding-gate";
+import { getAuthenticatedUserFromCookies } from "@/lib/auth-server";
 
 const pillars = [
   {
@@ -24,29 +21,10 @@ const pillars = [
   }
 ];
 
-export default function HomePage() {
-  const router = useRouter();
-  const { isLoading, isOnboarded } = useOnboardingGate();
-
-  useEffect(() => {
-    if (!isLoading && isOnboarded) {
-      router.replace("/dashboard");
-    }
-  }, [isLoading, isOnboarded, router]);
-
-  if (!isLoading && isOnboarded) {
-    return (
-      <main className="page-shell min-h-screen px-5 py-8 md:px-10 lg:px-14">
-        <div className="mx-auto max-w-3xl">
-          <Card>
-            <CardTitle>Opening your dashboard...</CardTitle>
-            <CardDescription className="mt-3">
-              We found your founder profile and are taking you to the dashboard.
-            </CardDescription>
-          </Card>
-        </div>
-      </main>
-    );
+export default async function HomePage() {
+  const authenticatedUser = await getAuthenticatedUserFromCookies();
+  if (authenticatedUser) {
+    redirect("/authed/dashboard");
   }
 
   return (

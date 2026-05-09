@@ -2,6 +2,112 @@
   "version": "1.0.0",
   "services": [
     {
+      "name": "auth-service",
+      "basePath": "/",
+      "port": 4005,
+      "notes": "Owns all authentication, session management, user profiles, and avatar storage. All session tokens are transmitted via HTTP-only cookies. Downstream services do not hold auth state; they receive user identity via the X-User-ID request header when the web app propagates it for future service-to-service needs.",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/register",
+          "summary": "Register a new user account, create their profile, and issue a session",
+          "requestContract": "body: { email: string, password: string (8-128 chars), displayName: string (1-120 chars) }",
+          "successContract": "AuthUserResponse: { user: AuthUser, profile: UserProfile }",
+          "errorCodes": ["VALIDATION_ERROR", "CONFLICT", "RATE_LIMITED"]
+        },
+        {
+          "method": "POST",
+          "path": "/auth/login",
+          "summary": "Validate credentials and issue a session cookie",
+          "requestContract": "body: { email: string, password: string }",
+          "successContract": "AuthUserResponse: { user: AuthUser, profile: UserProfile }",
+          "errorCodes": ["VALIDATION_ERROR", "UNAUTHORIZED", "NOT_FOUND", "RATE_LIMITED"]
+        },
+        {
+          "method": "POST",
+          "path": "/auth/logout",
+          "summary": "Revoke the current session and clear the session cookie",
+          "requestContract": "none (session resolved from cookie)",
+          "successContract": "{ ok: true }",
+          "errorCodes": []
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "summary": "Return the authenticated user and their profile (client bootstrap endpoint)",
+          "requestContract": "none (session resolved from cookie)",
+          "successContract": "AuthUserResponse: { user: AuthUser, profile: UserProfile }",
+          "errorCodes": ["UNAUTHORIZED"]
+        },
+        {
+          "method": "PATCH",
+          "path": "/profile",
+          "summary": "Update profile fields; all fields optional; sets onboardingCompletedAt when onboardingStatus is completed",
+          "requestContract": "body: { displayName?, firstName?, lastName?, companyName?, roleTitle?, bio?, locationCity?, onboardingStatus? }",
+          "successContract": "AuthUserResponse: { user: AuthUser, profile: UserProfile }",
+          "errorCodes": ["VALIDATION_ERROR", "UNAUTHORIZED"]
+        },
+        {
+          "method": "POST",
+          "path": "/profile/avatar",
+          "summary": "Upload an avatar image (multipart/form-data, field name: avatar, max 2 MB, allowed types: image/jpeg image/png image/webp image/gif)",
+          "requestContract": "multipart/form-data: { avatar: File }",
+          "successContract": "AuthUserResponse: { user: AuthUser, profile: UserProfile }",
+          "errorCodes": ["VALIDATION_ERROR", "UNAUTHORIZED"]
+        },
+        {
+          "method": "DELETE",
+          "path": "/profile/avatar",
+          "summary": "Remove the avatar reference from the profile and delete the stored file",
+          "requestContract": "none (session resolved from cookie)",
+          "successContract": "AuthUserResponse: { user: AuthUser, profile: UserProfile }",
+          "errorCodes": ["UNAUTHORIZED"]
+        },
+        {
+          "method": "GET",
+          "path": "/profile/avatar/:storageKey",
+          "summary": "Serve the raw avatar binary by its storage key",
+          "requestContract": "params: { storageKey: string }",
+          "successContract": "Binary image with appropriate Content-Type header",
+          "errorCodes": ["NOT_FOUND"]
+        },
+        {
+          "method": "GET",
+          "path": "/health",
+          "summary": "Service health check",
+          "requestContract": "none",
+          "successContract": "{ ok: true }",
+          "errorCodes": []
+        }
+      ],
+      "types": {
+        "AuthUser": {
+          "id": "uuid",
+          "email": "string",
+          "emailVerifiedAt": "string | null",
+          "createdAt": "string (ISO 8601)",
+          "updatedAt": "string (ISO 8601)"
+        },
+        "UserProfile": {
+          "id": "uuid",
+          "userId": "uuid",
+          "displayName": "string",
+          "firstName": "string | null",
+          "lastName": "string | null",
+          "companyName": "string | null",
+          "roleTitle": "string | null",
+          "bio": "string | null",
+          "locationCity": "string | null",
+          "avatarUrl": "string | null",
+          "avatarStorageKey": "string | null",
+          "onboardingStatus": "not_started | in_progress | completed",
+          "onboardingCompletedAt": "string | null (ISO 8601)",
+          "createdAt": "string (ISO 8601)",
+          "updatedAt": "string (ISO 8601)"
+        }
+      }
+    },
+    {
       "name": "resource-service",
       "basePath": "/",
       "endpoints": [

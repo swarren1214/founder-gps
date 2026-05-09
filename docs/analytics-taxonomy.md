@@ -13,6 +13,10 @@ Define a stable baseline event taxonomy for MVP analytics so product insights st
 | `founder_flow_completed` | Orchestration succeeds and dashboard is persisted | `recommendations`, `hasRoute`, `hasRoadmap` | Track successful completions and payload health |
 | `founder_flow_retry_requested` | User retries from fallback state on dashboard | `city`, `topN` | Measure resilience interactions |
 | `founder_flow_retry_completed` | Retry request succeeds | `warnings`, `hasRoute`, `hasRoadmap` | Monitor recovery success rate |
+| `user_registered` | New user completes registration | `method` | Track registration conversion |
+| `user_logged_in` | Existing user completes login | `method` | Track active login sessions |
+| `user_logged_out` | User logs out | _(none)_ | Track session termination |
+| `onboarding_completed` | User completes the onboarding flow | `hasAvatar` | Track onboarding funnel completion |
 
 ## Event Hygiene Rules
 
