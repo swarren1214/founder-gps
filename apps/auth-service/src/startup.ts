@@ -11,6 +11,8 @@ const AUTH_SCHEMA_MIGRATION_PATH = path.resolve(
 );
 
 export async function ensureAuthSchema(pool: Pick<Pool, "query">): Promise<void> {
+  // Required for gen_random_uuid() defaults used in auth migration tables.
+  await pool.query("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
   const migrationSql = await readFile(AUTH_SCHEMA_MIGRATION_PATH, "utf8");
   await pool.query(migrationSql);
 }

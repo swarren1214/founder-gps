@@ -1,7 +1,6 @@
 @config "../tailwind.config.ts";
 @import "tailwindcss";
-@import "../node_modules/tw-animate-css/dist/tw-animate.css";
-@import "../node_modules/shadcn/dist/tailwind.css";
+@import "tw-animate-css";
 
 :root {
   color-scheme: light;

@@ -1,7 +1,7 @@
 services:
   postgres:
-    image: postgis/postgis:16-3.4
-    container_name: founder-gps-postgres
+    platform: linux/arm64
+    image: postgres:16-alpine
     ports:
       - "55432:5432"
     environment:
@@ -13,7 +13,6 @@ services:
 
   osrm:
     image: ghcr.io/project-osrm/osrm-backend:v6.0.0
-    container_name: founder-gps-osrm
     command: osrm-routed --algorithm mld /data/utah-latest.osrm
     ports:
       - "${OSRM_HOST_PORT:-5001}:5000"

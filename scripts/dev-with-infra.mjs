@@ -97,6 +97,15 @@ function checkDockerAvailable() {
   }
 }
 
+function assertNotRunningFromTrash() {
+  const cwd = process.cwd();
+  if (cwd.includes("/.Trash/")) {
+    throw new Error(
+      `This project is running from Trash (${cwd}). Restore or run from your working repo path to avoid stale config and high memory usage.`
+    );
+  }
+}
+
 function getRunningServiceSet() {
   const running = new Set();
 
@@ -145,9 +154,33 @@ function ensureInfraRunning() {
   }
 
   console.log(`[dev] Starting missing Docker services: ${missing.join(", ")}`);
-  const up = spawnSync("docker", ["compose", "up", "-d", ...missing], {
-    stdio: "inherit"
-  });
+  const up = runSync("docker", ["compose", "up", "-d", ...missing]);
+  if (up.stdout) {
+    process.stdout.write(up.stdout);
+  }
+  if (up.stderr) {
+    process.stderr.write(up.stderr);
+  }
+
+  if (up.status !== 0) {
+    const combined = `${up.stdout || ""}\n${up.stderr || ""}`;
+    if (combined.includes("is already in use by container")) {
+      console.warn("[dev] Found stale Docker container name conflict. Cleaning and retrying...");
+      runSync("docker", ["rm", "-f", "founder-gps-postgres", "founder-gps-osrm"]);
+
+      const retryUp = runSync("docker", ["compose", "up", "-d", ...missing]);
+      if (retryUp.stdout) {
+        process.stdout.write(retryUp.stdout);
+      }
+      if (retryUp.stderr) {
+        process.stderr.write(retryUp.stderr);
+      }
+
+      if (retryUp.status === 0) {
+        return;
+      }
+    }
+  }
 
   if (up.status !== 0) {
     throw new Error("Failed to start required Docker services with docker compose.");
@@ -184,6 +217,8 @@ function main() {
   const skipPortCleanup = args.has("--skip-port-cleanup");
 
   try {
+    assertNotRunningFromTrash();
+
     if (!skipPortCleanup) {
       clearStaleLocalDevPorts();
     } else {
