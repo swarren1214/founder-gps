@@ -5,7 +5,7 @@ import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { cn } from "@/lib/utils";
-import type { FounderRoute, Recommendation, ResourceCardData, StartupProfileData } from "@/lib/schemas";
+import type { FounderRoute, Recommendation, ResourceCardData, StartupProfileData, MapFilters } from "@/lib/schemas";
 
 type FounderMapProps = {
   resources: ResourceCardData[];
@@ -15,19 +15,25 @@ type FounderMapProps = {
   founderLocation: { lat: number; lng: number; city: string };
   showPins: boolean;
   selectedStartupId?: string | null;
+  selectedResourceId?: string | null;
+  onPinSelect?: (pin: { id: string; kind: "startup" | "resource" }) => void;
+  activeFilters?: MapFilters | null;
   className?: string;
 };
 
-// Pin SVG geometry constants (viewBox 0 0 80 94)
-// Circle: cx=40, cy=32, r=20  Anchor (tip): x=40, y=88
-const PIN_W = 80;
-const PIN_H = 94;
-const PIN_CIRCLE_CX = 40;
-const PIN_CIRCLE_CY = 42;
-const PIN_CIRCLE_R = 20;
-const PIN_ANCHOR_Y = 88;
+// Pin SVG geometry constants (viewBox 0 0 61 71) based on the provided design.
+const PIN_W = 61;
+const PIN_H = 71;
+const PIN_CIRCLE_CX = 30.5;
+const PIN_CIRCLE_CY = 29.5;
+const PIN_CIRCLE_R = 21.5;
+const PIN_ANCHOR_Y = 64.7;
+const PIN_SHADOW_CX = 30.5;
+const PIN_SHADOW_CY = 64;
+const PIN_SHADOW_RX = 8.5;
+const PIN_SHADOW_RY = 3;
 
-const PIN_PATH = "M40 88c0 0 25-28 25-46 0-14-11-25-25-25S15 28 15 42c0 18 25 46 25 46z";
+const PIN_PATH = "M30.5 4C44.5833 4 56 15.4167 56 29.5C56 37.7068 52.1232 45.008 46.101 49.6723C42.3514 52.5764 38.3218 55.28 35.5214 59.1078L31.9521 63.9865C31.7883 64.2113 31.5709 64.3948 31.3181 64.5215C31.0653 64.6481 30.7846 64.7143 30.4997 64.7143C30.2149 64.7143 29.9342 64.6481 29.6814 64.5215C29.4286 64.3948 29.2111 64.2113 29.0473 63.9865L25.4776 59.1071C22.6774 55.2796 18.6481 52.5761 14.8987 49.6721C8.87671 45.0078 5 37.7066 5 29.5C5 15.4167 16.4167 4 30.5 4Z";
 
 const PIN_FALLBACK_COLORS = [
   "#124e66",
@@ -125,7 +131,7 @@ function getOpaqueBounds(img: HTMLImageElement): { sx: number; sy: number; sw: n
   }
 }
 
-async function buildPinIcon(logoUrl: string | null, isRecommended: boolean, label: string): Promise<string> {
+async function buildPinIcon(logoUrl: string | null, _isRecommended: boolean, label: string): Promise<string> {
   const scale = 2; // retina canvas
   const canvas = document.createElement("canvas");
   canvas.width = PIN_W * scale;
@@ -133,23 +139,40 @@ async function buildPinIcon(logoUrl: string | null, isRecommended: boolean, labe
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     // Fallback: plain SVG data URL (no logo)
-    const fill = isRecommended ? "#0f6a74" : "#11203b";
-    const badge = getFallbackColor(label);
     const initial = getFallbackInitial(label);
     return (
       "data:image/svg+xml;charset=utf-8," +
       encodeURIComponent(
-        `<svg xmlns='http://www.w3.org/2000/svg' width='${PIN_W}' height='${PIN_H}' viewBox='0 0 ${PIN_W} ${PIN_H}'><path d='${PIN_PATH}' fill='${fill}'/><circle cx='${PIN_CIRCLE_CX}' cy='${PIN_CIRCLE_CY}' r='${PIN_CIRCLE_R}' fill='${badge}'/><text x='${PIN_CIRCLE_CX}' y='${PIN_CIRCLE_CY + 1}' text-anchor='middle' dominant-baseline='middle' fill='#fff' font-family='system-ui, -apple-system, Segoe UI, sans-serif' font-size='14' font-weight='700'>${initial}</text></svg>`
+        `<svg xmlns='http://www.w3.org/2000/svg' width='${PIN_W}' height='${PIN_H}' viewBox='0 0 ${PIN_W} ${PIN_H}'><ellipse cx='${PIN_SHADOW_CX}' cy='${PIN_SHADOW_CY}' rx='${PIN_SHADOW_RX}' ry='${PIN_SHADOW_RY}' fill='rgba(0,0,0,0.2)'/><path d='${PIN_PATH}' fill='#ffffff'/><circle cx='${PIN_CIRCLE_CX}' cy='${PIN_CIRCLE_CY}' r='${PIN_CIRCLE_R}' fill='#D9D9D9'/><text x='${PIN_CIRCLE_CX}' y='${PIN_CIRCLE_CY + 0.5}' text-anchor='middle' dominant-baseline='middle' fill='#fff' font-family='system-ui, -apple-system, Segoe UI, sans-serif' font-size='14' font-weight='700'>${initial}</text></svg>`
       )
     );
   }
 
   ctx.scale(scale, scale);
 
-  const pinColor = isRecommended ? "#0f6a74" : "#11203b";
-  // Pin body
-  ctx.fillStyle = pinColor;
+  // Ground shadow
+  ctx.save();
+  ctx.filter = "blur(1px)";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+  ctx.beginPath();
+  ctx.ellipse(PIN_SHADOW_CX, PIN_SHADOW_CY, PIN_SHADOW_RX, PIN_SHADOW_RY, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Pin body with soft drop shadow
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.1)";
+  ctx.shadowBlur = 5;
+  ctx.shadowOffsetY = 1;
+  ctx.fillStyle = "#ffffff";
   ctx.fill(new Path2D(PIN_PATH));
+  ctx.restore();
+
+  // Badge base circle
+  ctx.beginPath();
+  ctx.arc(PIN_CIRCLE_CX, PIN_CIRCLE_CY, PIN_CIRCLE_R, 0, Math.PI * 2);
+  ctx.fillStyle = "#D9D9D9";
+  ctx.fill();
 
   // Logo clipped to circle (fills edge-to-edge), then stroke drawn on top
   if (logoUrl) {
@@ -161,11 +184,6 @@ async function buildPinIcon(logoUrl: string | null, isRecommended: boolean, labe
         img.onerror = () => reject(new Error("logo load failed"));
         img.src = logoUrl;
       });
-      // Fill circle with white first (in case logo has transparency)
-      ctx.beginPath();
-      ctx.arc(PIN_CIRCLE_CX, PIN_CIRCLE_CY, PIN_CIRCLE_R, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffffff";
-      ctx.fill();
       // Clip and draw logo to exactly fill the circle
       ctx.save();
       ctx.beginPath();
@@ -204,7 +222,7 @@ async function buildPinIcon(logoUrl: string | null, isRecommended: boolean, labe
 
 type ResourcePin = ResourceCardData & { pinIconUrl: string };
 type StartupPin = { id: string; name: string; lat: number; lng: number; pinIconUrl: string };
-type MapPin = { id: string; name: string; lat: number; lng: number; pinIconUrl: string; size: number };
+type MapPin = { id: string; kind: "startup" | "resource"; name: string; lat: number; lng: number; pinIconUrl: string; size: number };
 type PinCluster = {
   id: string;
   lat: number;
@@ -228,6 +246,23 @@ function getDomainFromUrl(url: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function resolveLogoSource(logoUrl: string | null, website: string | null, strict = true): string | null {
+  if (logoUrl?.startsWith("/")) {
+    return logoUrl;
+  }
+
+  const domain = getDomainFromUrl(website);
+  if (logoUrl) {
+    return `/api/logo?src=${encodeURIComponent(logoUrl)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}&size=64${strict ? "&strict=1" : ""}`;
+  }
+
+  if (domain) {
+    return `/api/logo?domain=${encodeURIComponent(domain)}&size=64${strict ? "&strict=1" : ""}`;
+  }
+
+  return null;
 }
 
 function clusterPins(points: MapPin[], map: maplibregl.Map, radiusPx = 52): { clusters: PinCluster[]; singles: MapPin[] } {
@@ -313,10 +348,14 @@ export function FounderMap({
   founderLocation,
   showPins,
   selectedStartupId = null,
+  selectedResourceId = null,
+  onPinSelect,
+  activeFilters = null,
   className
 }: FounderMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<maplibregl.Map | null>(null);
+  const overlayRef = useRef<MapboxOverlay | null>(null);
 
   const recommendedIds = useMemo(
     () => new Set(recommendations.map((recommendation) => recommendation.resourceId)),
@@ -326,23 +365,105 @@ export function FounderMap({
   const [resourcePins, setResourcePins] = useState<ResourcePin[]>([]);
   const [startupPins, setStartupPins] = useState<StartupPin[]>([]);
   const [mapRevision, setMapRevision] = useState(0);
+  const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
 
   const allPins = useMemo<MapPin[]>(
-    () => [
-      ...startupPins.map((pin) => ({
+    () => {
+      const baseStartupPins = startupPins.map((pin) => ({
         ...pin,
-        size: pin.id === selectedStartupId ? 72 : 56
-      })),
-      ...resourcePins.map((pin) => ({
+        kind: "startup" as const,
+        size: pin.id === selectedStartupId ? 80 : 56
+      }));
+
+      const baseResourcePins = resourcePins.map((pin) => ({
         id: pin.id,
+        kind: "resource" as const,
         name: pin.name,
         lat: pin.lat,
         lng: pin.lng,
         pinIconUrl: pin.pinIconUrl,
-        size: recommendedIds.has(pin.id) ? 72 : 64
-      }))
-    ],
-    [resourcePins, startupPins, recommendedIds, selectedStartupId]
+        size: pin.id === selectedResourceId ? 82 : recommendedIds.has(pin.id) ? 72 : 64
+      }));
+
+      if (!activeFilters || activeFilters.intent === "general") {
+        return [...baseStartupPins, ...baseResourcePins];
+      }
+
+      if (activeFilters.clearFilters) {
+        return [...baseStartupPins, ...baseResourcePins];
+      }
+
+      // Apply filter dimming logic
+      if (activeFilters.intent === "filter_resources") {
+        // Dim startup pins, highlight resource pins
+        return [
+          ...baseStartupPins.map((pin) => ({ ...pin, size: 28 })),
+          ...baseResourcePins
+        ];
+      }
+
+      if (activeFilters.intent === "filter_startups") {
+        // Dim resource pins, highlight startup pins
+        return [
+          ...baseStartupPins,
+          ...baseResourcePins.map((pin) => ({ ...pin, size: 28 }))
+        ];
+      }
+
+      if (activeFilters.intent === "filter_both") {
+        // Filter both based on keywords/categories/sectors
+        const matchStartup = (startup: StartupProfileData) => {
+          if (activeFilters.sectors && activeFilters.sectors.length > 0) {
+            const sectorMatch = activeFilters.sectors.some(
+              (sector) => startup.sector?.toLowerCase().includes(sector.toLowerCase())
+            );
+            if (!sectorMatch) return false;
+          }
+          if (activeFilters.keywords && activeFilters.keywords.length > 0) {
+            const keywordMatch = activeFilters.keywords.some(
+              (keyword) =>
+                startup.name.toLowerCase().includes(keyword.toLowerCase()) ||
+                startup.description?.toLowerCase().includes(keyword.toLowerCase())
+            );
+            if (!keywordMatch) return false;
+          }
+          return true;
+        };
+
+        const matchResource = (resource: ResourceCardData) => {
+          if (activeFilters.resourceCategories && activeFilters.resourceCategories.length > 0) {
+            const categoryMatch = activeFilters.resourceCategories.includes(resource.category);
+            if (!categoryMatch) return false;
+          }
+          if (activeFilters.keywords && activeFilters.keywords.length > 0) {
+            const keywordMatch = activeFilters.keywords.some(
+              (keyword) =>
+                resource.name.toLowerCase().includes(keyword.toLowerCase()) ||
+                resource.description.toLowerCase().includes(keyword.toLowerCase()) ||
+                resource.tags.some((tag) => tag.toLowerCase().includes(keyword.toLowerCase()))
+            );
+            if (!keywordMatch) return false;
+          }
+          return true;
+        };
+
+        return [
+          ...baseStartupPins.map((pin) => {
+            const startup = startups.find((s) => s.id === pin.id);
+            const matches = startup && matchStartup(startup);
+            return { ...pin, size: matches ? pin.size : 28 };
+          }),
+          ...baseResourcePins.map((pin) => {
+            const resource = resources.find((r) => r.id === pin.id);
+            const matches = resource && matchResource(resource);
+            return { ...pin, size: matches ? pin.size : 28 };
+          })
+        ];
+      }
+
+      return [...baseStartupPins, ...baseResourcePins];
+    },
+    [resourcePins, startupPins, recommendedIds, selectedStartupId, selectedResourceId, activeFilters, startups, resources]
   );
 
   const clusteredPins = useMemo(() => {
@@ -361,12 +482,7 @@ export function FounderMap({
       startups
         .filter((startup): startup is StartupProfileData & { lat: number; lng: number } => startup.lat !== null && startup.lng !== null)
         .map(async (startup) => {
-          const domain = getDomainFromUrl(startup.website);
-          const proxiedLogoUrl = startup.logoUrl
-            ? `/api/logo?src=${encodeURIComponent(startup.logoUrl)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}&size=64&strict=1`
-            : domain
-              ? `/api/logo?domain=${encodeURIComponent(domain)}&size=64&strict=1`
-              : null;
+          const proxiedLogoUrl = resolveLogoSource(startup.logoUrl, startup.website, true);
           const pinIconUrl = await buildPinIcon(proxiedLogoUrl, true, startup.name);
           return {
             id: startup.id,
@@ -392,12 +508,7 @@ export function FounderMap({
 
     Promise.all(
       resources.map(async (resource) => {
-        const domain = getDomainFromUrl(resource.website);
-        const logoUrl = resource.logoUrl
-          ? `/api/logo?src=${encodeURIComponent(resource.logoUrl)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}&size=64&strict=1`
-          : domain
-            ? `/api/logo?domain=${encodeURIComponent(domain)}&size=64&strict=1`
-            : null;
+        const logoUrl = resolveLogoSource(resource.logoUrl, resource.website, true);
         const isRecommended = recommendedIds.has(resource.id);
         const pinIconUrl = await buildPinIcon(logoUrl, isRecommended, resource.name);
         return { ...resource, pinIconUrl };
@@ -433,9 +544,47 @@ export function FounderMap({
       setMapRevision((value) => value + 1);
     });
 
+    const overlay = new MapboxOverlay({
+      interleaved: true,
+      layers: [],
+      getTooltip: ({ layer, object }) => {
+        if (layer?.id === "pin-cluster-layer" && object && "count" in object) {
+          const cluster = object as PinCluster;
+          return {
+            text: `${cluster.count} startups/resources`,
+            style: {
+              borderRadius: "12px"
+            }
+          };
+        }
+
+        if (layer?.id === "pin-cluster-count-layer") {
+          return null;
+        }
+
+        if (layer?.id === "all-pins-layer" && object && "name" in object) {
+          return {
+            text: (object as MapPin).name,
+            style: {
+              borderRadius: "12px"
+            }
+          };
+        }
+
+        return null;
+      }
+    });
+
+    overlayRef.current = overlay;
+    map.addControl(overlay);
+
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
     return () => {
+      if (overlayRef.current) {
+        map.removeControl(overlayRef.current);
+        overlayRef.current = null;
+      }
       instanceRef.current?.remove();
       instanceRef.current = null;
     };
@@ -474,35 +623,14 @@ export function FounderMap({
   }, [selectedStartupCoords]);
 
   useEffect(() => {
-    const map = instanceRef.current;
-    if (!map) {
+    const overlay = overlayRef.current;
+    if (!overlay) {
       return;
     }
 
     const routeCoordinates = route?.geojson.features[0]?.geometry.coordinates ?? [];
 
-    const overlay = new MapboxOverlay({
-      interleaved: true,
-      getTooltip: ({ layer, object }) => {
-        if (layer?.id === "pin-cluster-layer" && object && "count" in object) {
-          const cluster = object as PinCluster;
-          return {
-            text: `${cluster.count} startups/resources`
-          };
-        }
-
-        if (layer?.id === "pin-cluster-count-layer") {
-          return null;
-        }
-
-        if (layer?.id === "all-pins-layer" && object && "name" in object) {
-          return {
-            text: (object as MapPin).name
-          };
-        }
-
-        return null;
-      },
+    overlay.setProps({
       layers: [
         new ScatterplotLayer({
           id: "founder-location-layer",
@@ -575,13 +703,35 @@ export function FounderMap({
                   // Canvas is drawn at 2x (retina): PIN_W*2 × PIN_H*2
                   width: PIN_W * 2,
                   height: PIN_H * 2,
-                  anchorX: PIN_W, // center x = 40*2
-                  anchorY: PIN_ANCHOR_Y * 2 // pin tip = 88*2
+                  anchorX: PIN_W,
+                  anchorY: PIN_ANCHOR_Y * 2
                 }),
-                getSize: (pin) => pin.size,
+                getSize: (pin) => (pin.id === hoveredPinId ? pin.size * 1.1 : pin.size),
                 sizeUnits: "pixels",
                 sizeScale: 1,
-                pickable: true
+                pickable: true,
+                autoHighlight: true,
+                highlightColor: [255, 255, 255, 56],
+                transitions: {
+                  getSize: 120
+                },
+                updateTriggers: {
+                  getSize: hoveredPinId
+                },
+                onHover: ({ object }) => {
+                  const hovered = object as MapPin | null;
+                  setHoveredPinId((prev) => {
+                    const next = hovered?.id ?? null;
+                    return prev === next ? prev : next;
+                  });
+                },
+                onClick: ({ object }) => {
+                  const selectedPin = object as MapPin | null;
+                  if (!selectedPin) {
+                    return;
+                  }
+                  onPinSelect?.({ id: selectedPin.id, kind: selectedPin.kind });
+                }
               })
             ]
           : []),
@@ -595,21 +745,14 @@ export function FounderMap({
         })
       ]
     });
-
-    map.addControl(overlay);
-
-    return () => {
-      map.removeControl(overlay);
-    };
   }, [
-    resources,
-    recommendations,
-    route,
-    startups,
     founderLocation.city,
     founderLocation.lat,
     founderLocation.lng,
     clusteredPins,
+    hoveredPinId,
+    onPinSelect,
+    route,
     showPins
   ]);
 

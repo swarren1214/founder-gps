@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Moon, Sun } from "lucide-react";
 import { useOnboardingGate } from "@/hooks/use-onboarding-gate";
 
@@ -20,6 +21,7 @@ export function Header() {
   if (!mounted) return null;
 
   const isDark = resolvedTheme === "dark";
+  const profileHref = !isLoading && isOnboarded ? "/profile" : "/onboarding";
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -38,35 +40,29 @@ export function Header() {
           </Link>
         </div>
 
-        <nav className="hidden items-center gap-5 text-sm text-muted-foreground md:flex">
-          {!isLoading && !isOnboarded ? (
-            <Link href="/onboarding" className="transition hover:text-foreground">Get started</Link>
-          ) : null}
-          {!isLoading && isOnboarded ? (
-            <>
-              <Link href="/dashboard" className="transition hover:text-foreground">Dashboard</Link>
-              <Link href="/map" className="transition hover:text-foreground">Map</Link>
-              <Link href="/roadmap" className="transition hover:text-foreground">Roadmap</Link>
-              <Link href="/profile" className="transition hover:text-foreground">Profile</Link>
-            </>
-          ) : null}
-        </nav>
+        <div className="flex items-center gap-2">
+          {/* Theme Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            className="h-9 w-9"
+            title={`Switch to ${isDark ? "light" : "dark"} mode`}
+          >
+            {isDark ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+            <span className="sr-only">Toggle theme</span>
+          </Button>
 
-        {/* Theme Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setTheme(isDark ? "light" : "dark")}
-          className="h-9 w-9"
-          title={`Switch to ${isDark ? "light" : "dark"} mode`}
-        >
-          {isDark ? (
-            <Sun className="h-4 w-4" />
-          ) : (
-            <Moon className="h-4 w-4" />
-          )}
-          <span className="sr-only">Toggle theme</span>
-        </Button>
+          <Link href={profileHref} aria-label="Open profile">
+            <Avatar className="size-9 transition-transform hover:scale-105">
+              <AvatarFallback className="bg-secondary/20 text-secondary">FG</AvatarFallback>
+            </Avatar>
+          </Link>
+        </div>
       </div>
     </header>
   );

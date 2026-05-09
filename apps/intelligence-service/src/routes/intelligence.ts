@@ -4,7 +4,8 @@ import {
   AiService,
   ExplainRecommendationInputSchema,
   FounderAnalysisInputSchema,
-  RoadmapInputSchema
+  RoadmapInputSchema,
+  MapChatInputSchema
 } from "@founder-gps/ai";
 import { sendApiError } from "@founder-gps/shared-types";
 import type { IntelligenceRepository } from "../repository.js";
@@ -123,6 +124,38 @@ export async function intelligenceRoutes(
         reply,
         "DEPENDENCY_UNAVAILABLE",
         "AI provider unavailable. Unable to generate roadmap."
+      );
+    }
+  });
+
+  app.post("/intelligence/map-chat", async (request, reply) => {
+    const parsed = MapChatInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendApiError(reply, "VALIDATION_ERROR", "Invalid map-chat request.", parsed.error.flatten());
+    }
+
+    try {
+      const result = await aiService.chatWithMap(parsed.data);
+      logMetadata(app, "/intelligence/map-chat", {
+        provider: result.metadata.provider,
+        model: result.metadata.model,
+        promptVersion: result.metadata.promptVersion,
+        latencyMs: result.metadata.latencyMs,
+        tokensIn: result.metadata.tokensIn,
+        tokensOut: result.metadata.tokensOut,
+        fallbackUsed: result.metadata.fallbackUsed
+      });
+
+      return reply.send({
+        filters: result.data,
+        metadata: result.metadata
+      });
+    } catch (error) {
+      app.log.error({ error }, "map_chat_failed");
+      return sendApiError(
+        reply,
+        "DEPENDENCY_UNAVAILABLE",
+        "AI provider unavailable. Unable to process map chat."
       );
     }
   });

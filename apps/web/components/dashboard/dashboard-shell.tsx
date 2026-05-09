@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Building2, ExternalLink, MapPin, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { founderFlowResponseSchema, type FounderFlowResponse } from "@/lib/schemas";
+import { founderFlowResponseSchema, type FounderFlowResponse, type MapFilters } from "@/lib/schemas";
 import { saveDashboardRun } from "@/lib/session";
 import { trackEvent } from "@/lib/analytics";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { FounderMap } from "@/components/map/founder-map";
 import { DashboardControls } from "@/components/dashboard/dashboard-controls";
+import { MapChat } from "@/components/dashboard/map-chat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useOnboardingGate } from "@/hooks/use-onboarding-gate";
@@ -22,6 +23,9 @@ export function DashboardShell() {
   const [retryError, setRetryError] = useState<string | null>(null);
   const [showPins, setShowPins] = useState(true);
   const [selectedStartupId, setSelectedStartupId] = useState<string | null>(null);
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
+  const [activeFilters, setActiveFilters] = useState<MapFilters | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
   const hasAttemptedStartupHydration = useRef(false);
 
   useEffect(() => {
@@ -147,7 +151,38 @@ export function DashboardShell() {
 
   function handleStartupSelect(startupId: string) {
     setSelectedStartupId(startupId);
+    setSelectedResourceId(null);
+    setActiveTab("startups");
     setShowPins(true);
+  }
+
+  function handleResourceSelect(resourceId: string) {
+    setSelectedResourceId(resourceId);
+    setSelectedStartupId(null);
+    setActiveTab("resources");
+    setShowPins(true);
+  }
+
+  function handlePinSelect(pin: { id: string; kind: "startup" | "resource" }) {
+    if (pin.kind === "startup") {
+      handleStartupSelect(pin.id);
+      return;
+    }
+    handleResourceSelect(pin.id);
+  }
+
+  function handleChatFilter(filters: MapFilters) {
+    setActiveFilters(filters);
+    if (filters.tab) {
+      setActiveTab(filters.tab);
+    }
+    if (filters.clearFilters) {
+      setActiveFilters(null);
+    }
+  }
+
+  function handleClearFilter() {
+    setActiveFilters(null);
   }
 
   return (
@@ -161,6 +196,9 @@ export function DashboardShell() {
         recommendations={recommendations}
         route={route}
         selectedStartupId={selectedStartupId}
+        selectedResourceId={selectedResourceId}
+        onPinSelect={handlePinSelect}
+        activeFilters={activeFilters}
         founderLocation={{
           city: founderProfile.locationCity,
           lat: founderProfile.locationLat,
@@ -183,7 +221,13 @@ export function DashboardShell() {
           showPins={showPins}
           onTogglePins={() => setShowPins((v) => !v)}
           selectedStartupId={selectedStartupId}
+          selectedResourceId={selectedResourceId}
           onStartupSelect={handleStartupSelect}
+          onResourceSelect={handleResourceSelect}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          activeFilters={activeFilters}
+          onClearFilter={handleClearFilter}
         />
       </motion.div>
 
@@ -292,6 +336,15 @@ export function DashboardShell() {
           </motion.aside>
         ) : null}
       </AnimatePresence>
+
+      <MapChat
+        founderProfile={founderProfile}
+        analysis={currentRun.analysis}
+        resources={resources}
+        startups={startups}
+        onFilter={handleChatFilter}
+        onClearFilter={handleClearFilter}
+      />
     </div>
   );
 }

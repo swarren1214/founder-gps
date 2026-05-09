@@ -60,9 +60,29 @@ export const RoadmapSchema = z.object({
   weeks: z.array(RoadmapWeekSchema).length(4)
 });
 
+export const MapChatInputSchema = z.object({
+  query: z.string().min(1),
+  founderSummary: z.string().min(1),
+  availableCategories: z.array(z.string()),
+  availableSectors: z.array(z.string())
+});
+
+export const MapFilterSchema = z.object({
+  reply: z.string().min(1),
+  intent: z.enum(["filter_resources", "filter_startups", "filter_both", "clear", "general"]),
+  tab: z.enum(["overview", "roadmap", "startups", "resources"]).optional(),
+  resourceCategories: z.array(z.string()).optional(),
+  keywords: z.array(z.string()).optional(),
+  sectors: z.array(z.string()).optional(),
+  states: z.array(z.string()).optional(),
+  clearFilters: z.boolean().optional()
+});
+
 export type FounderAnalysisInput = z.infer<typeof FounderAnalysisInputSchema>;
 export type FounderAnalysis = z.infer<typeof FounderAnalysisSchema>;
 export type ExplainRecommendationInput = z.infer<typeof ExplainRecommendationInputSchema>;
 export type RecommendationExplanation = z.infer<typeof RecommendationExplanationSchema>;
 export type RoadmapInput = z.infer<typeof RoadmapInputSchema>;
 export type Roadmap = z.infer<typeof RoadmapSchema>;
+export type MapChatInput = z.infer<typeof MapChatInputSchema>;
+export type MapFilter = z.infer<typeof MapFilterSchema>;

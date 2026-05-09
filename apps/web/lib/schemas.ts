@@ -155,6 +155,23 @@ export const founderFlowResponseSchema = z.object({
   warnings: z.array(z.string())
 });
 
+export const mapFilterSchema = z.object({
+  intent: z.enum(["filter_resources", "filter_startups", "filter_both", "clear", "general"]),
+  tab: z.enum(["overview", "roadmap", "startups", "resources"]).optional(),
+  resourceCategories: z.array(z.string()).optional(),
+  keywords: z.array(z.string()).optional(),
+  sectors: z.array(z.string()).optional(),
+  states: z.array(z.string()).optional(),
+  clearFilters: z.boolean().optional()
+});
+
+export const mapChatRequestSchema = z.object({
+  query: z.string().min(1),
+  founderSummary: z.string().min(1),
+  availableCategories: z.array(z.string()),
+  availableSectors: z.array(z.string())
+});
+
 export type FounderIntake = z.infer<typeof founderIntakeSchema>;
 export type FounderAnalysis = z.infer<typeof founderAnalysisSchema>;
 export type Recommendation = z.infer<typeof recommendationSchema>;
@@ -163,3 +180,5 @@ export type Roadmap = z.infer<typeof roadmapSchema>;
 export type FounderFlowResponse = z.infer<typeof founderFlowResponseSchema>;
 export type ResourceCardData = z.infer<typeof startupResourceSchema>;
 export type StartupProfileData = z.infer<typeof startupProfileSchema>;
+export type MapFilters = z.infer<typeof mapFilterSchema>;
+export type MapChatRequest = z.infer<typeof mapChatRequestSchema>;

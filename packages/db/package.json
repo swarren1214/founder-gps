@@ -8,6 +8,7 @@
     "seed": "tsx src/seed.ts",
     "import:resources": "tsx src/import-resources.ts",
     "backfill:startups:logos": "tsx src/backfill-startup-logos.ts",
+    "cache:startups:icons": "tsx src/cache-startup-profile-icons.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

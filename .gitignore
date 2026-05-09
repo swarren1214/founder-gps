@@ -18,3 +18,7 @@ coverage/
 
 # Logs
 *.log
+
+# Generated startup logo cache
+apps/web/public/startup-logos/*
+!apps/web/public/startup-logos/.gitkeep

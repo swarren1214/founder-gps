@@ -1,11 +1,12 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { AlertTriangle, Building2, Compass, MapPin, RefreshCw, Route, Sparkles, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { FounderFlowResponse } from "@/lib/schemas";
+import type { FounderFlowResponse, MapFilters } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 
 type DashboardControlsProps = {
@@ -16,7 +17,13 @@ type DashboardControlsProps = {
   showPins: boolean;
   onTogglePins: () => void;
   selectedStartupId?: string | null;
+  selectedResourceId?: string | null;
   onStartupSelect?: (startupId: string) => void;
+  onResourceSelect?: (resourceId: string) => void;
+  activeTab?: string;
+  onTabChange?: (tab: string) => void;
+  activeFilters?: MapFilters | null;
+  onClearFilter?: () => void;
 };
 
 const STARTUP_AVATAR_COLORS = [
@@ -53,13 +60,78 @@ export function DashboardControls({
   showPins,
   onTogglePins,
   selectedStartupId = null,
-  onStartupSelect
+  selectedResourceId = null,
+  onStartupSelect,
+  onResourceSelect,
+  activeTab = "overview",
+  onTabChange,
+  activeFilters = null,
+  onClearFilter
 }: DashboardControlsProps) {
+  const containerRef = useRef<HTMLElement | null>(null);
   const { founderProfile, analysis, recommendations, route, roadmap, startups, warnings } = run;
 
+  // Filter startups based on activeFilters
+  const filteredStartups = activeFilters && !activeFilters.clearFilters ? startups.filter((startup) => {
+    if (activeFilters.sectors && activeFilters.sectors.length > 0) {
+      const sectorMatch = activeFilters.sectors.some(
+        (sector) => startup.sector?.toLowerCase().includes(sector.toLowerCase())
+      );
+      if (!sectorMatch) return false;
+    }
+    if (activeFilters.keywords && activeFilters.keywords.length > 0) {
+      const keywordMatch = activeFilters.keywords.some(
+        (keyword) =>
+          startup.name.toLowerCase().includes(keyword.toLowerCase()) ||
+          startup.description?.toLowerCase().includes(keyword.toLowerCase())
+      );
+      if (!keywordMatch) return false;
+    }
+    return true;
+  }) : startups;
+
+  // Filter resources based on activeFilters
+  const filteredResources = activeFilters && !activeFilters.clearFilters ? run.resources.filter((resource) => {
+    if (activeFilters.resourceCategories && activeFilters.resourceCategories.length > 0) {
+      const categoryMatch = activeFilters.resourceCategories.includes(resource.category);
+      if (!categoryMatch) return false;
+    }
+    if (activeFilters.keywords && activeFilters.keywords.length > 0) {
+      const keywordMatch = activeFilters.keywords.some(
+        (keyword) =>
+          resource.name.toLowerCase().includes(keyword.toLowerCase()) ||
+          resource.description.toLowerCase().includes(keyword.toLowerCase()) ||
+          resource.tags.some((tag) => tag.toLowerCase().includes(keyword.toLowerCase()))
+      );
+      if (!keywordMatch) return false;
+    }
+    return true;
+  }) : run.resources;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    if (activeTab === "startups" && selectedStartupId) {
+      const target = container.querySelector<HTMLElement>(`[data-startup-id="${selectedStartupId}"]`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      }
+    }
+
+    if (activeTab === "resources" && selectedResourceId) {
+      const target = container.querySelector<HTMLElement>(`[data-resource-id="${selectedResourceId}"]`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      }
+    }
+  }, [activeTab, selectedStartupId, selectedResourceId, filteredStartups, filteredResources]);
+
   return (
-    <aside className="bg-card/75 backdrop-blur-lg p-5 h-full w-full overflow-y-scroll">
-      <Tabs defaultValue="overview" className="flex w-full flex-col gap-4">
+    <aside ref={containerRef} className="bg-card/75 backdrop-blur-lg p-5 h-full w-full overflow-y-scroll">
+      <Tabs value={activeTab} onValueChange={onTabChange} className="flex w-full flex-col gap-4">
         <TabsList className="grid h-9 w-full grid-cols-4 rounded-lg bg-muted p-1 text-muted-foreground">
           <TabsTrigger
             value="overview"
@@ -184,11 +256,27 @@ export function DashboardControls({
                 <h4 className="font-semibold">Startup profiles</h4>
               </div>
 
-              {startups.length > 0 ? (
+              {activeFilters && !activeFilters.clearFilters ? (
+                <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
+                  <Badge className="bg-primary/20 text-primary text-xs">
+                    {filteredStartups.length} of {startups.length} matching
+                  </Badge>
+                  <button
+                    type="button"
+                    onClick={onClearFilter}
+                    className="ml-auto text-xs font-medium text-primary hover:underline"
+                  >
+                    Clear filter
+                  </button>
+                </div>
+              ) : null}
+
+              {filteredStartups.length > 0 ? (
                 <div className="space-y-2">
-                  {startups.map((startup) => (
+                  {filteredStartups.map((startup) => (
                     <button
                       key={startup.id}
+                      data-startup-id={startup.id}
                       type="button"
                       onClick={() => onStartupSelect?.(startup.id)}
                       className={cn(
@@ -238,7 +326,7 @@ export function DashboardControls({
                 </div>
               ) : (
                 <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">
-                  No startup profiles are available for this run.
+                  {activeFilters && !activeFilters.clearFilters ? "No startup profiles match the current filters." : "No startup profiles are available for this run."}
                 </div>
               )}
             </div>
@@ -273,6 +361,21 @@ export function DashboardControls({
             <h4 className="font-semibold">Map resources</h4>
           </div>
 
+          {activeFilters && !activeFilters.clearFilters ? (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
+              <Badge className="bg-primary/20 text-primary text-xs">
+                {filteredResources.length} of {run.resources.length} matching
+              </Badge>
+              <button
+                type="button"
+                onClick={onClearFilter}
+                className="ml-auto text-xs font-medium text-primary hover:underline"
+              >
+                Clear filter
+              </button>
+            </div>
+          ) : null}
+
           <div className="rounded-2xl border border-border/70 bg-muted/35 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -291,11 +394,22 @@ export function DashboardControls({
           </div>
 
           <div className="space-y-2">
-            {run.resources.map((resource) => (
-              <div key={resource.id} className="rounded-2xl border border-border/70 bg-muted/35 px-3 py-2.5">
+            {filteredResources.map((resource) => (
+              <button
+                key={resource.id}
+                data-resource-id={resource.id}
+                type="button"
+                onClick={() => onResourceSelect?.(resource.id)}
+                className={cn(
+                  "w-full rounded-2xl border px-3 py-2.5 text-left transition-colors",
+                  selectedResourceId === resource.id
+                    ? "border-primary/60 bg-primary/12 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.18)]"
+                    : "border-border/70 bg-muted/35 hover:border-primary/30 hover:bg-muted/55"
+                )}
+              >
                 <p className="text-sm font-semibold">{resource.name}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground capitalize">{resource.category.replaceAll("_", " ")}</p>
-              </div>
+              </button>
             ))}
           </div>
         </TabsContent>

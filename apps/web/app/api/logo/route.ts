@@ -16,6 +16,143 @@ type BrandfetchResponse = {
   logos?: BrandfetchLogo[];
 };
 
+type BrandfetchCandidate = {
+  logoType: string;
+  format: BrandfetchFormat;
+};
+
+function normalizeBrandfetchFormat(value?: string): "svg" | "png" | "jpeg" | "other" {
+  const normalized = (value ?? "").toLowerCase();
+  if (normalized.includes("svg")) return "svg";
+  if (normalized.includes("png")) return "png";
+  if (normalized.includes("jpeg") || normalized.includes("jpg")) return "jpeg";
+  return "other";
+}
+
+function inferFormatFromSrc(src: string): "svg" | "png" | "jpeg" | "other" {
+  try {
+    const parsed = new URL(src);
+    const path = parsed.pathname.toLowerCase();
+    if (path.endsWith(".svg")) return "svg";
+    if (path.endsWith(".png")) return "png";
+    if (path.endsWith(".jpeg") || path.endsWith(".jpg")) return "jpeg";
+  } catch {
+    // noop
+  }
+  return "other";
+}
+
+function formatRank(candidate: BrandfetchCandidate): number {
+  const fromFormat = normalizeBrandfetchFormat(candidate.format.format);
+  const inferred = inferFormatFromSrc(candidate.format.src);
+  const normalized = fromFormat === "other" ? inferred : fromFormat;
+
+  if (normalized === "svg") return 0;
+  if (normalized === "png") return 1;
+  if (normalized === "jpeg") return 2;
+  return 3;
+}
+
+function pickBrandfetchSource(payload: BrandfetchResponse): string | null {
+  const allCandidates: BrandfetchCandidate[] = (payload.logos ?? [])
+    .flatMap((logo) =>
+      (logo.formats ?? []).map((format) => ({
+        logoType: logo.type ?? "",
+        format
+      }))
+    )
+    .filter((entry) => typeof entry.format.src === "string" && entry.format.src.length > 0);
+
+  const iconCandidates = allCandidates.filter((entry) => entry.logoType.toLowerCase() === "icon");
+  const fallbackCandidates = allCandidates.filter((entry) => entry.logoType.toLowerCase() !== "icon");
+  const candidatePool = iconCandidates.length > 0 ? iconCandidates : fallbackCandidates;
+
+  candidatePool.sort((a, b) => {
+    const rankDiff = formatRank(a) - formatRank(b);
+    if (rankDiff !== 0) {
+      return rankDiff;
+    }
+
+    const aWidth = a.format.width ?? 0;
+    const bWidth = b.format.width ?? 0;
+    if (aWidth !== bWidth) {
+      return bWidth - aWidth;
+    }
+
+    const aHeight = a.format.height ?? 0;
+    const bHeight = b.format.height ?? 0;
+    return bHeight - aHeight;
+  });
+
+  return candidatePool[0]?.format.src ?? null;
+}
+
+function extractBrandfetchBase(source: string): { base: string; query: string } | null {
+  try {
+    const parsed = new URL(source);
+    if (parsed.hostname !== "cdn.brandfetch.io") {
+      return null;
+    }
+
+    const path = parsed.pathname;
+    const marker = path.match(/\/(logo|icon)\.(svg|png|jpe?g)$/i);
+    if (!marker || marker.index === undefined) {
+      return null;
+    }
+
+    const basePath = path.slice(0, marker.index + 1);
+    return {
+      base: `${parsed.origin}${basePath}`,
+      query: parsed.search
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function probeImage(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "image/*" },
+      cache: "no-store"
+    });
+    const contentType = response.headers.get("content-type") || "";
+    return response.ok && contentType.startsWith("image/");
+  } catch {
+    return false;
+  }
+}
+
+async function getBrandfetchSourceFromExisting(sourceUrl: string | null): Promise<string | null> {
+  if (!sourceUrl) {
+    return null;
+  }
+
+  const parsed = extractBrandfetchBase(sourceUrl);
+  if (!parsed) {
+    return null;
+  }
+
+  const formats = ["svg", "png", "jpeg", "jpg"];
+  const candidates: string[] = [];
+
+  for (const format of formats) {
+    candidates.push(`${parsed.base}icon.${format}${parsed.query}`);
+  }
+
+  for (const format of formats) {
+    candidates.push(`${parsed.base}logo.${format}${parsed.query}`);
+  }
+
+  for (const candidate of candidates) {
+    if (await probeImage(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 function normalizeDomain(input: string): string {
   const trimmed = input.trim();
   const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
@@ -76,47 +213,30 @@ async function getBrandfetchLogoSource(domain: string): Promise<string | null> {
   }
 
   const payload = (await response.json()) as BrandfetchResponse;
-  const candidates = (payload.logos ?? [])
-    .flatMap((logo) =>
-      (logo.formats ?? []).map((format) => ({
-        logoType: logo.type ?? "",
-        format
-      }))
-    )
-    .filter((entry) => typeof entry.format.src === "string" && entry.format.src.length > 0)
-    .sort((a, b) => {
-      const aIsIcon = a.logoType.toLowerCase() === "icon" ? 0 : 1;
-      const bIsIcon = b.logoType.toLowerCase() === "icon" ? 0 : 1;
-      if (aIsIcon !== bIsIcon) {
-        return aIsIcon - bIsIcon;
-      }
-
-      const aRatio =
-        typeof a.format.width === "number" && typeof a.format.height === "number" && a.format.height > 0
-          ? Math.abs(1 - a.format.width / a.format.height)
-          : Number.POSITIVE_INFINITY;
-      const bRatio =
-        typeof b.format.width === "number" && typeof b.format.height === "number" && b.format.height > 0
-          ? Math.abs(1 - b.format.width / b.format.height)
-          : Number.POSITIVE_INFINITY;
-      if (aRatio !== bRatio) {
-        return aRatio - bRatio;
-      }
-
-      const aFormatRank = a.format.format === "svg" ? 0 : a.format.format === "png" ? 1 : 2;
-      const bFormatRank = b.format.format === "svg" ? 0 : b.format.format === "png" ? 1 : 2;
-      if (aFormatRank !== bFormatRank) {
-        return aFormatRank - bFormatRank;
-      }
-
-      return (b.format.width ?? 0) - (a.format.width ?? 0);
-    });
-
-  return candidates[0]?.format.src ?? null;
+  return pickBrandfetchSource(payload);
 }
 
 async function fetchBrandfetch(domain: string): Promise<Response | null> {
   const source = await getBrandfetchLogoSource(domain);
+  if (!source) {
+    return null;
+  }
+
+  const response = await fetch(source, {
+    headers: { Accept: "image/*" },
+    cache: "no-store"
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!response.ok || !contentType.startsWith("image/")) {
+    return null;
+  }
+
+  return response;
+}
+
+async function fetchBrandfetchFromExisting(sourceUrl: string | null): Promise<Response | null> {
+  const source = await getBrandfetchSourceFromExisting(sourceUrl);
   if (!source) {
     return null;
   }
@@ -215,31 +335,43 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    if (sourceUrl) {
-      const directSource = await fetchDirectSource(sourceUrl);
-      if (directSource?.body) {
-        return toImageResponse(directSource);
-      }
-    }
-
     if (domain) {
+      const logoDev = await fetchLogoDev(domain, clampedSize);
+      if (logoDev?.body) {
+        return toImageResponse(logoDev);
+      }
+
       const brandfetch = await fetchBrandfetch(domain);
       if (brandfetch?.body) {
         return toImageResponse(brandfetch);
+      }
+
+      const brandfetchFromExisting = await fetchBrandfetchFromExisting(sourceUrl);
+      if (brandfetchFromExisting?.body) {
+        return toImageResponse(brandfetchFromExisting);
+      }
+
+      if (sourceUrl) {
+        const directSource = await fetchDirectSource(sourceUrl);
+        if (directSource?.body) {
+          return toImageResponse(directSource);
+        }
       }
 
       if (strictMode) {
         return NextResponse.json({ error: "logo not found" }, { status: 404 });
       }
 
-      const logoDev = await fetchLogoDev(domain, clampedSize);
-      if (logoDev?.body) {
-        return toImageResponse(logoDev);
-      }
-
       const fallback = await fetchFaviconFallback(domain, clampedSize);
       if (fallback?.body) {
         return toImageResponse(fallback);
+      }
+    }
+
+    if (sourceUrl) {
+      const directSource = await fetchDirectSource(sourceUrl);
+      if (directSource?.body) {
+        return toImageResponse(directSource);
       }
     }
 

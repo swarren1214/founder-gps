@@ -1,3 +1,6 @@
+import { readdir, rm } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { dbPool } from "./client.js";
 
 type BrandfetchFormat = {
@@ -16,6 +19,143 @@ type BrandfetchResponse = {
   logos?: BrandfetchLogo[];
 };
 
+type BrandfetchCandidate = {
+  logoType: string;
+  format: BrandfetchFormat;
+};
+
+function normalizeBrandfetchFormat(value?: string): "svg" | "png" | "jpeg" | "other" {
+  const normalized = (value ?? "").toLowerCase();
+  if (normalized.includes("svg")) return "svg";
+  if (normalized.includes("png")) return "png";
+  if (normalized.includes("jpeg") || normalized.includes("jpg")) return "jpeg";
+  return "other";
+}
+
+function inferFormatFromSrc(src: string): "svg" | "png" | "jpeg" | "other" {
+  try {
+    const parsed = new URL(src);
+    const path = parsed.pathname.toLowerCase();
+    if (path.endsWith(".svg")) return "svg";
+    if (path.endsWith(".png")) return "png";
+    if (path.endsWith(".jpeg") || path.endsWith(".jpg")) return "jpeg";
+  } catch {
+    // noop
+  }
+  return "other";
+}
+
+function formatRank(candidate: BrandfetchCandidate): number {
+  const fromFormat = normalizeBrandfetchFormat(candidate.format.format);
+  const inferred = inferFormatFromSrc(candidate.format.src);
+  const normalized = fromFormat === "other" ? inferred : fromFormat;
+
+  if (normalized === "svg") return 0;
+  if (normalized === "png") return 1;
+  if (normalized === "jpeg") return 2;
+  return 3;
+}
+
+function pickBrandfetchSource(payload: BrandfetchResponse): string | null {
+  const allCandidates: BrandfetchCandidate[] = (payload.logos ?? [])
+    .flatMap((logo) =>
+      (logo.formats ?? []).map((format) => ({
+        logoType: logo.type ?? "",
+        format
+      }))
+    )
+    .filter((entry) => typeof entry.format.src === "string" && entry.format.src.length > 0);
+
+  const iconCandidates = allCandidates.filter((entry) => entry.logoType.toLowerCase() === "icon");
+  const fallbackCandidates = allCandidates.filter((entry) => entry.logoType.toLowerCase() !== "icon");
+  const candidatePool = iconCandidates.length > 0 ? iconCandidates : fallbackCandidates;
+
+  candidatePool.sort((a, b) => {
+    const rankDiff = formatRank(a) - formatRank(b);
+    if (rankDiff !== 0) {
+      return rankDiff;
+    }
+
+    const aWidth = a.format.width ?? 0;
+    const bWidth = b.format.width ?? 0;
+    if (aWidth !== bWidth) {
+      return bWidth - aWidth;
+    }
+
+    const aHeight = a.format.height ?? 0;
+    const bHeight = b.format.height ?? 0;
+    return bHeight - aHeight;
+  });
+
+  return candidatePool[0]?.format.src ?? null;
+}
+
+function extractBrandfetchBase(source: string): { base: string; query: string } | null {
+  try {
+    const parsed = new URL(source);
+    if (parsed.hostname !== "cdn.brandfetch.io") {
+      return null;
+    }
+
+    const path = parsed.pathname;
+    const marker = path.match(/\/(logo|icon)\.(svg|png|jpe?g)$/i);
+    if (!marker || marker.index === undefined) {
+      return null;
+    }
+
+    const basePath = path.slice(0, marker.index + 1);
+    return {
+      base: `${parsed.origin}${basePath}`,
+      query: parsed.search
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function probeImage(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "image/*" },
+      cache: "no-store"
+    });
+    const contentType = response.headers.get("content-type") || "";
+    return response.ok && contentType.startsWith("image/");
+  } catch {
+    return false;
+  }
+}
+
+async function getBrandfetchSourceFromExisting(existingSource: string | null): Promise<string | null> {
+  if (!existingSource) {
+    return null;
+  }
+
+  const parsed = extractBrandfetchBase(existingSource);
+  if (!parsed) {
+    return null;
+  }
+
+  const formats = ["svg", "png", "jpeg", "jpg"];
+  const candidates: string[] = [];
+
+  for (const format of formats) {
+    candidates.push(`${parsed.base}icon.${format}${parsed.query}`);
+  }
+
+  for (const format of formats) {
+    candidates.push(`${parsed.base}logo.${format}${parsed.query}`);
+  }
+
+  for (const candidate of candidates) {
+    if (await probeImage(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 function normalizeDomain(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) {
@@ -28,6 +168,37 @@ function normalizeDomain(input: string): string | null {
     return parsed.hostname.replace(/^www\./, "").toLowerCase();
   } catch {
     return null;
+  }
+}
+
+function logoDevUrl(domain: string): string {
+  const token = process.env.LOGO_DEV_API_KEY || process.env.LOGO_DEV_PUBLISHABLE_KEY || "";
+  const url = new URL(`https://img.logo.dev/${domain}`);
+  url.searchParams.set("size", "128");
+  url.searchParams.set("format", "png");
+  if (token) {
+    url.searchParams.set("token", token);
+  }
+  return url.toString();
+}
+
+function getOutputDirectory(): string {
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(scriptDir, "../../../apps/web/public/startup-logos");
+}
+
+async function removeExistingIconFiles(outputDir: string, startupId: string): Promise<void> {
+  try {
+    const files = await readdir(outputDir);
+    const prefix = `${startupId}.`;
+
+    await Promise.all(
+      files
+        .filter((fileName) => fileName.startsWith(prefix))
+        .map((fileName) => rm(path.join(outputDir, fileName), { force: true }))
+    );
+  } catch {
+    // Ignore missing directory and continue backfill updates.
   }
 }
 
@@ -45,51 +216,12 @@ async function getBrandfetchLogoSource(domain: string, apiKey: string): Promise<
   }
 
   const payload = (await response.json()) as BrandfetchResponse;
-  const candidates = (payload.logos ?? [])
-    .flatMap((logo) =>
-      (logo.formats ?? []).map((format) => ({
-        logoType: logo.type ?? "",
-        format
-      }))
-    )
-    .filter((entry) => typeof entry.format.src === "string" && entry.format.src.length > 0)
-    .sort((a, b) => {
-      const aIsIcon = a.logoType.toLowerCase() === "icon" ? 0 : 1;
-      const bIsIcon = b.logoType.toLowerCase() === "icon" ? 0 : 1;
-      if (aIsIcon !== bIsIcon) {
-        return aIsIcon - bIsIcon;
-      }
-
-      const aRatio =
-        typeof a.format.width === "number" && typeof a.format.height === "number" && a.format.height > 0
-          ? Math.abs(1 - a.format.width / a.format.height)
-          : Number.POSITIVE_INFINITY;
-      const bRatio =
-        typeof b.format.width === "number" && typeof b.format.height === "number" && b.format.height > 0
-          ? Math.abs(1 - b.format.width / b.format.height)
-          : Number.POSITIVE_INFINITY;
-      if (aRatio !== bRatio) {
-        return aRatio - bRatio;
-      }
-
-      const aFormatRank = a.format.format === "svg" ? 0 : a.format.format === "png" ? 1 : 2;
-      const bFormatRank = b.format.format === "svg" ? 0 : b.format.format === "png" ? 1 : 2;
-      if (aFormatRank !== bFormatRank) {
-        return aFormatRank - bFormatRank;
-      }
-
-      return (b.format.width ?? 0) - (a.format.width ?? 0);
-    });
-
-  return candidates[0]?.format.src ?? null;
+  return pickBrandfetchSource(payload);
 }
 
 async function run() {
   const apiKey = process.env.BRANDFETCH_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("BRANDFETCH_API_KEY is required.");
-  }
+  const outputDir = getOutputDirectory();
 
   const result = await dbPool.query<{
     id: string;
@@ -108,6 +240,7 @@ async function run() {
 
   let updated = 0;
   let skipped = 0;
+  let failed = 0;
 
   for (const row of result.rows) {
     const domain = row.website ? normalizeDomain(row.website) : null;
@@ -118,7 +251,18 @@ async function run() {
     }
 
     try {
-      const logoSource = await getBrandfetchLogoSource(domain, apiKey);
+      let logoSource: string | null = null;
+
+      const preferredLogoDev = logoDevUrl(domain);
+      if (await probeImage(preferredLogoDev)) {
+        logoSource = preferredLogoDev;
+      }
+
+      if (!logoSource && apiKey) {
+        logoSource =
+          (await getBrandfetchLogoSource(domain, apiKey)) ||
+          (await getBrandfetchSourceFromExisting(row.logo_url));
+      }
 
       if (!logoSource) {
         skipped += 1;
@@ -129,6 +273,10 @@ async function run() {
       if (existingLogo && existingLogo === logoSource) {
         skipped += 1;
         continue;
+      }
+
+      if (existingLogo.startsWith("/startup-logos/")) {
+        await removeExistingIconFiles(outputDir, row.id);
       }
 
       await dbPool.query(
@@ -143,14 +291,14 @@ async function run() {
 
       updated += 1;
     } catch {
-      skipped += 1;
+      failed += 1;
     }
 
     // Soft throttle to avoid API rate spikes during backfill.
     await new Promise((resolve) => setTimeout(resolve, 120));
   }
 
-  console.log(`Startup logo backfill complete. Updated: ${updated}, Skipped: ${skipped}`);
+  console.log(`Startup logo backfill complete. Updated: ${updated}, Skipped: ${skipped}, Failed: ${failed}`);
 
   await dbPool.end();
 }

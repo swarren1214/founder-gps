@@ -8,16 +8,20 @@ import {
   type ExplainRecommendationInput,
   RoadmapSchema,
   type Roadmap,
-  type RoadmapInput
+  type RoadmapInput,
+  MapFilterSchema,
+  type MapFilter,
+  type MapChatInput
 } from "./schemas.js";
 import {
   analyzeFounderPrompt,
   explainRecommendationPrompt,
   generateRoadmapPrompt,
+  mapChatPrompt,
   PROMPT_VERSIONS
 } from "./prompts.js";
 
-export type AiTask = "analyze-founder" | "explain-recommendation" | "generate-roadmap";
+export type AiTask = "analyze-founder" | "explain-recommendation" | "generate-roadmap" | "map-chat";
 
 export type AiMetadata = {
   provider: "openai" | "gemini" | "heuristic";
@@ -219,6 +223,63 @@ class HeuristicProvider implements AiProvider {
         explanation: `${input.recommendationName} is relevant because ${input.recommendationReason}.`,
         founderAction: `Schedule one concrete next step this week with ${input.recommendationName}.`
       };
+    } else if (options.task === "map-chat") {
+      const input = options.userPayload as MapChatInput;
+      const queryLower = input.query.toLowerCase();
+      const isFilterRequest =
+        queryLower.includes("show") ||
+        queryLower.includes("find") ||
+        queryLower.includes("funding") ||
+        queryLower.includes("mentor") ||
+        queryLower.includes("resource");
+      const isClearRequest = queryLower.includes("clear") || queryLower.includes("all") || queryLower.includes("reset");
+
+      if (isClearRequest) {
+        draft = {
+          reply: "Cleared all filters. Showing all resources and startups.",
+          intent: "clear",
+          clearFilters: true
+        };
+      } else if (isFilterRequest) {
+        const isFunding =
+          queryLower.includes("funding") || queryLower.includes("capital") || queryLower.includes("investment");
+        const isMentor = queryLower.includes("mentor") || queryLower.includes("advisor");
+        const isUtah = queryLower.includes("utah");
+        const isSoftware =
+          queryLower.includes("software") || queryLower.includes("saas") || queryLower.includes("tech");
+
+        const matchedCategories = input.availableCategories.filter((cat) => {
+          const catLower = cat.toLowerCase();
+          return (isFunding && catLower.includes("fund")) ||
+            (isMentor && catLower.includes("mentor")) ||
+            catLower.includes("accelerator") ||
+            catLower.includes("investor");
+        });
+
+        const matchedSectors = input.availableSectors.filter((sec) => {
+          const secLower = sec.toLowerCase();
+          return isSoftware && secLower.includes("software");
+        });
+
+        const keywords = [];
+        if (isFunding) keywords.push("funding", "capital");
+        if (isMentor) keywords.push("mentor", "advisor");
+        if (isSoftware) keywords.push("software", "saas");
+
+        draft = {
+          reply: `Filtering for ${matchedCategories.length > 0 ? "relevant funding and mentor resources" : "related resources"}.`,
+          intent: matchedSectors.length > 0 ? "filter_both" : "filter_resources",
+          tab: matchedSectors.length > 0 ? "startups" : "resources",
+          resourceCategories: matchedCategories.length > 0 ? matchedCategories : undefined,
+          keywords: keywords.length > 0 ? keywords : undefined,
+          sectors: matchedSectors.length > 0 ? matchedSectors : undefined
+        };
+      } else {
+        draft = {
+          reply: "I can help you filter resources and startups. Try asking for specific types like 'funding resources', 'mentor startups', or 'clear filters'.",
+          intent: "general"
+        };
+      }
     } else {
       const input = options.userPayload as RoadmapInput;
       draft = {
@@ -404,6 +465,17 @@ export class AiService {
       schema: RoadmapSchema,
       promptVersion: PROMPT_VERSIONS.generateRoadmap,
       systemPrompt: generateRoadmapPrompt(),
+      userPayload: input
+    });
+  }
+
+  async chatWithMap(input: MapChatInput): Promise<AiResult<MapFilter>> {
+    const provider = this.selectProvider();
+    return this.withFallback(provider, {
+      task: "map-chat",
+      schema: MapFilterSchema,
+      promptVersion: PROMPT_VERSIONS.mapChat,
+      systemPrompt: mapChatPrompt(),
       userPayload: input
     });
   }
