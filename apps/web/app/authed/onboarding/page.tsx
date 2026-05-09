@@ -19,7 +19,8 @@ export default function OnboardingPage() {
 
   if (!isLoading && isOnboarded) {
     return (
-      <main className="page-shell min-h-screen px-5 py-10 md:px-10 lg:px-14">
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-secondary px-5 py-10 md:px-10">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,hsl(var(--primary)/0.18),transparent_35%),radial-gradient(circle_at_84%_16%,hsl(var(--card)),transparent_30%)]" />
         <div className="mx-auto max-w-3xl">
           <Card>
             <CardTitle>Onboarding already complete</CardTitle>
@@ -33,8 +34,9 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="page-shell min-h-screen px-5 py-10 md:px-10 lg:px-14">
-      <div className="mx-auto max-w-7xl">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-secondary px-5 py-10 md:px-10">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,hsl(var(--primary)/0.18),transparent_35%),radial-gradient(circle_at_84%_16%,hsl(var(--card)),transparent_30%)]" />
+      <div className="relative z-10 mx-auto w-full max-w-6xl">
         <FounderIntakeForm />
       </div>
     </main>

@@ -58,10 +58,7 @@ function deriveFounderStage(stage: OnboardingState["stage"]): FounderIntake["sta
 type OnboardingState = {
   firstName: string;
   lastName: string;
-  email: string;
   phone: string;
-  password: string;
-  confirmPassword: string;
   companyName: string;
   companySize: string;
   dateFounded: string;
@@ -74,10 +71,7 @@ type OnboardingState = {
 const defaultState: OnboardingState = {
   firstName: "",
   lastName: "",
-  email: "",
   phone: "",
-  password: "",
-  confirmPassword: "",
   companyName: "",
   companySize: "",
   dateFounded: "",
@@ -89,11 +83,15 @@ const defaultState: OnboardingState = {
 
 const steps = [
   { title: "Identity", helper: "Your personal basics" },
-  { title: "Security", helper: "Set access credentials" },
   { title: "Avatar", helper: "Upload profile image" },
   { title: "Company Info", helper: "Core business information" },
   { title: "Details", helper: "Stage and company description" },
   { title: "Founder Interview", helper: "Answer AI prompts" }
+] as const;
+
+const onboardingJourneySteps = [
+  { title: "Create account", helper: "Set your login credentials" },
+  ...steps
 ] as const;
 
 export function FounderIntakeForm() {
@@ -114,19 +112,17 @@ export function FounderIntakeForm() {
 
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
-  const progress = useMemo(() => ((stepIndex + 1) / steps.length) * 100, [stepIndex]);
+  const progress = useMemo(
+    () => ((stepIndex + 2) / onboardingJourneySteps.length) * 100,
+    [stepIndex]
+  );
 
   function updateField<K extends keyof OnboardingState>(key: K, value: OnboardingState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   function nextStep() {
-    if (stepIndex === 1 && form.password !== form.confirmPassword) {
-      setError("Passwords must match before continuing.");
-      return;
-    }
-
-    if (stepIndex === 5 && interview.length < interviewQuestions.length) {
+    if (stepIndex === steps.length - 1 && interview.length < interviewQuestions.length) {
       setError("Please answer all interview questions before completing onboarding.");
       return;
     }
@@ -267,12 +263,10 @@ export function FounderIntakeForm() {
           identity: {
             firstName: form.firstName,
             lastName: form.lastName,
-            email: form.email,
             phone: form.phone
           },
           security: {
-            passwordConfigured: Boolean(form.password),
-            passwordConfirmed: Boolean(form.password && form.password === form.confirmPassword)
+            accountCreated: true
           },
           company: {
             companyName: form.companyName,
@@ -319,49 +313,50 @@ export function FounderIntakeForm() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
-      <Card className="bg-[#11203b] text-white">
-        <Badge className="mb-5 border-white/20 bg-white/10 text-white">Onboarding</Badge>
-        <CardTitle className="text-white">Launch your founder profile</CardTitle>
-        <CardDescription className="mt-3 text-white/72">
-          Complete six steps to unlock your personalized dashboard and recommendations.
-        </CardDescription>
-        <div className="mt-8 space-y-4">
-          {steps.map((item, index) => (
-            <div key={item.title} className="flex items-center gap-4">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-full border ${index <= stepIndex ? "border-white bg-white text-ink" : "border-white/20 bg-transparent text-white/60"}`}>
-                {index + 1}
-              </div>
-              <div>
-                <p className="font-semibold">{item.title}</p>
-                <p className="text-sm text-white/62">{item.helper}</p>
-              </div>
-            </div>
-          ))}
+    <Card className="border-border/60 bg-card/95 shadow-2xl">
+      <div className="mb-6 rounded-2xl border border-border/70 bg-muted/35 p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <Badge>Onboarding</Badge>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{Math.round(progress)}% complete</p>
         </div>
-        <div className="mt-8 rounded-3xl bg-white/10 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-white/55">Progress</p>
-          <p className="mt-3 text-sm text-white/80">
-            {stepIndex + 1} / {steps.length} complete
-          </p>
-          <p className="mt-2 text-xs text-white/60">{Math.round(progress)}% finished</p>
-        </div>
-      </Card>
+        <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+          {onboardingJourneySteps.map((item, index) => {
+            const isActive = index === stepIndex + 1;
+            const isCompleted = index < stepIndex + 1;
 
-      <Card className="bg-card/90">
-        <div className="mb-8 flex items-center justify-between gap-4 border-b border-border pb-6">
-          <div>
-            <Badge>{step.title}</Badge>
-            <CardTitle className="mt-4">Founder onboarding stepper</CardTitle>
-            <CardDescription className="mt-2">
-              We will save this context to your profile and personalize your founder workspace.
-            </CardDescription>
-          </div>
-          <div className="min-w-[120px] text-right">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Progress</p>
-            <p className="font-display text-3xl">{Math.round(progress)}%</p>
-          </div>
+            return (
+              <div
+                key={item.title}
+                className={`rounded-xl border px-3 py-2 ${
+                  isActive
+                    ? "border-primary bg-primary/10"
+                    : isCompleted
+                      ? "border-emerald-500/35 bg-emerald-500/10"
+                      : "border-border/70 bg-background/60"
+                }`}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Step {index + 1}</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{item.title}</p>
+                <p className="text-xs text-muted-foreground">{item.helper}</p>
+              </div>
+            );
+          })}
         </div>
+      </div>
+
+      <div className="mb-8 flex items-center justify-between gap-4 border-b border-border pb-6">
+        <div>
+          <Badge>{step.title}</Badge>
+          <CardTitle className="mt-4">Complete your founder onboarding</CardTitle>
+          <CardDescription className="mt-2">
+            We will save this context to your profile and personalize your founder workspace.
+          </CardDescription>
+        </div>
+        <div className="min-w-30 text-right">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Progress</p>
+          <p className="font-display text-3xl">{Math.round(progress)}%</p>
+        </div>
+      </div>
 
         <div className="mb-8 h-3 overflow-hidden rounded-full bg-muted">
           <div className="h-full rounded-full bg-[linear-gradient(90deg,#0f6a74,#ff7a1a)]" style={{ width: `${progress}%` }} />
@@ -379,10 +374,6 @@ export function FounderIntakeForm() {
                 <Input id="lastName" value={form.lastName} onChange={(event) => updateField("lastName", event.target.value)} />
               </div>
               <div>
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} />
-              </div>
-              <div>
                 <Label htmlFor="phone">Phone number</Label>
                 <Input id="phone" value={form.phone} onChange={(event) => updateField("phone", event.target.value)} />
               </div>
@@ -390,19 +381,6 @@ export function FounderIntakeForm() {
           ) : null}
 
           {stepIndex === 1 ? (
-            <>
-              <div>
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="confirmPassword">Confirm password</Label>
-                <Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={(event) => updateField("confirmPassword", event.target.value)} />
-              </div>
-            </>
-          ) : null}
-
-          {stepIndex === 2 ? (
             <>
               <div className="md:col-span-2">
                 <Label htmlFor="avatarUpload">Profile avatar</Label>
@@ -433,7 +411,7 @@ export function FounderIntakeForm() {
             </>
           ) : null}
 
-          {stepIndex === 3 ? (
+          {stepIndex === 2 ? (
             <>
               <div>
                 <Label htmlFor="companyName">Company name</Label>
@@ -458,7 +436,7 @@ export function FounderIntakeForm() {
             </>
           ) : null}
 
-          {stepIndex === 4 ? (
+          {stepIndex === 3 ? (
             <>
               <div>
                 <Label htmlFor="founderStage">Stage</Label>
@@ -481,7 +459,7 @@ export function FounderIntakeForm() {
             </>
           ) : null}
 
-          {stepIndex === 5 ? (
+          {stepIndex === 4 ? (
             <>
               <div className="md:col-span-2 rounded-2xl border border-border bg-muted/40 p-4">
                 <p className="text-sm font-medium">Founder interview</p>
@@ -537,7 +515,6 @@ export function FounderIntakeForm() {
             </Button>
           )}
         </div>
-      </Card>
-    </div>
+    </Card>
   );
 }

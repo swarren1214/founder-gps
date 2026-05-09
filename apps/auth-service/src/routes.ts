@@ -182,8 +182,7 @@ export async function authRoutes(app: FastifyInstance, options: RouteOptions) {
     const passwordHash = await hashPassword(parsed.data.password);
     const { user, profile } = await options.repository.createUserWithProfile({
       email: parsed.data.email,
-      passwordHash,
-      displayName: parsed.data.displayName
+      passwordHash
     });
 
     const rawSessionToken = generateSessionToken();

@@ -2,8 +2,7 @@ import { z } from "zod";
 
 export const RegisterRequestSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8).max(128),
-  displayName: z.string().min(1).max(120)
+  password: z.string().min(8).max(128)
 });
 
 export const LoginRequestSchema = z.object({
@@ -12,7 +11,6 @@ export const LoginRequestSchema = z.object({
 });
 
 export const UpdateProfileRequestSchema = z.object({
-  displayName: z.string().min(1).max(120).optional(),
   firstName: z.string().min(1).max(80).nullable().optional(),
   lastName: z.string().min(1).max(80).nullable().optional(),
   companyName: z.string().min(1).max(160).nullable().optional(),
@@ -31,7 +29,6 @@ export const UpdateProfileRequestSchema = z.object({
 export const UserProfileSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
-  displayName: z.string(),
   firstName: z.string().nullable(),
   lastName: z.string().nullable(),
   companyName: z.string().nullable(),

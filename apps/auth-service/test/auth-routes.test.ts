@@ -15,7 +15,6 @@ class InMemoryAuthRepository implements AuthRepository {
   async createUserWithProfile(params: {
     email: string;
     passwordHash: string;
-    displayName: string;
   }): Promise<{ user: AuthUser; profile: UserProfile }> {
     const now = new Date().toISOString();
     const user: AuthUser = {
@@ -30,7 +29,6 @@ class InMemoryAuthRepository implements AuthRepository {
     const profile: UserProfile = {
       id: randomUUID(),
       userId: user.id,
-      displayName: params.displayName,
       firstName: null,
       lastName: null,
       companyName: null,
@@ -72,7 +70,6 @@ class InMemoryAuthRepository implements AuthRepository {
 
     const nextProfile: UserProfile = {
       ...record.profile,
-      displayName: typeof patch.displayName === "string" ? patch.displayName : record.profile.displayName,
       firstName: patch.firstName === undefined ? record.profile.firstName : (patch.firstName as string | null),
       lastName: patch.lastName === undefined ? record.profile.lastName : (patch.lastName as string | null),
       companyName: patch.companyName === undefined ? record.profile.companyName : (patch.companyName as string | null),
@@ -258,13 +255,11 @@ describe("auth routes", () => {
       url: "/auth/register",
       payload: {
         email,
-        password,
-        displayName: "Ada Founder"
+        password
       }
     });
 
     expect(registerResponse.statusCode).toBe(200);
-    expect(registerResponse.json().profile.displayName).toBe("Ada Founder");
 
     const sessionToken = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
     expect(sessionToken).toBeTruthy();
@@ -299,7 +294,6 @@ describe("auth routes", () => {
         "content-type": "application/json"
       },
       payload: {
-        displayName: "Ada Builder",
         locationCity: "Lehi",
         onboardingStatus: "completed"
       }
@@ -386,8 +380,7 @@ describe("auth routes", () => {
       url: "/auth/register",
       payload: {
         email,
-        password: "correct horse battery staple",
-        displayName: "Ada Founder"
+        password: "correct horse battery staple"
       }
     });
 
@@ -456,23 +449,16 @@ describe("auth routes", () => {
       const noEmailResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { password: "validpassword1", displayName: "Test User" }
+        payload: { password: "validpassword1" }
       });
       expect(noEmailResponse.statusCode).toBe(400);
 
       const noPasswordResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: "test@example.com", displayName: "Test User" }
+        payload: { email: "test@example.com" }
       });
       expect(noPasswordResponse.statusCode).toBe(400);
-
-      const noDisplayNameResponse = await app.inject({
-        method: "POST",
-        url: "/auth/register",
-        payload: { email: "test@example.com", password: "validpassword1" }
-      });
-      expect(noDisplayNameResponse.statusCode).toBe(400);
     });
 
     it("rejects registration when password is too short", async () => {
@@ -487,7 +473,7 @@ describe("auth routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: "test@example.com", password: "short", displayName: "Test User" }
+        payload: { email: "test@example.com", password: "short" }
       });
 
       expect(response.statusCode).toBe(400);
@@ -503,7 +489,7 @@ describe("auth routes", () => {
       });
 
       const email = `dup-${randomUUID()}@example.com`;
-      const payload = { email, password: "validpassword1", displayName: "First User" };
+      const payload = { email, password: "validpassword1" };
 
       const firstResponse = await app.inject({ method: "POST", url: "/auth/register", payload });
       expect(firstResponse.statusCode).toBe(200);
@@ -524,7 +510,7 @@ describe("auth routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: `cookie-test-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Cookie Test" }
+        payload: { email: `cookie-test-${randomUUID()}@example.com`, password: "validpassword1" }
       });
 
       expect(response.statusCode).toBe(200);
@@ -547,13 +533,12 @@ describe("auth routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password: "validpassword1", displayName: "New Founder" }
+        payload: { email, password: "validpassword1" }
       });
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body.user.email).toBe(email);
-      expect(body.profile.displayName).toBe("New Founder");
       expect(body.profile.onboardingStatus).toBe("not_started");
       expect(body.user).not.toHaveProperty("passwordHash");
     });
@@ -607,7 +592,7 @@ describe("auth routes", () => {
 
       const email = `login-${randomUUID()}@example.com`;
       const password = "validpassword1";
-      await app.inject({ method: "POST", url: "/auth/register", payload: { email, password, displayName: "Login User" } });
+      await app.inject({ method: "POST", url: "/auth/register", payload: { email, password } });
 
       const response = await app.inject({
         method: "POST",
@@ -657,7 +642,7 @@ describe("auth routes", () => {
       const registerResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password: "validpassword1", displayName: "Logout User" }
+        payload: { email, password: "validpassword1" }
       });
       const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
 
@@ -712,7 +697,7 @@ describe("auth routes", () => {
       const registerResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password: "validpassword1", displayName: "Me User" }
+        payload: { email, password: "validpassword1" }
       });
       const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
 
@@ -743,7 +728,7 @@ describe("auth routes", () => {
       const response = await app.inject({
         method: "PATCH",
         url: "/profile",
-        payload: { displayName: "Updated Name" }
+        payload: { locationCity: "Lehi" }
       });
       expect(response.statusCode).toBe(401);
     });
@@ -760,7 +745,7 @@ describe("auth routes", () => {
       const registerResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: `partial-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Original Name" }
+        payload: { email: `partial-${randomUUID()}@example.com`, password: "validpassword1" }
       });
       const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
 
@@ -773,7 +758,6 @@ describe("auth routes", () => {
 
       expect(patchResponse.statusCode).toBe(200);
       const profile = patchResponse.json().profile;
-      expect(profile.displayName).toBe("Original Name");
       expect(profile.locationCity).toBe("Provo");
       expect(profile.onboardingContext).toEqual({});
     });
@@ -790,7 +774,7 @@ describe("auth routes", () => {
       const registerResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: `context-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Context User" }
+        payload: { email: `context-${randomUUID()}@example.com`, password: "validpassword1" }
       });
       const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
 
@@ -845,7 +829,7 @@ describe("auth routes", () => {
       const registerResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: `invalid-context-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Invalid Context User" }
+        payload: { email: `invalid-context-${randomUUID()}@example.com`, password: "validpassword1" }
       });
       const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
 
@@ -877,7 +861,7 @@ describe("auth routes", () => {
       const registerResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: `secure-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Secure User" }
+        payload: { email: `secure-${randomUUID()}@example.com`, password: "validpassword1" }
       });
       const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
 
@@ -926,7 +910,7 @@ describe("auth routes", () => {
       const registerResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: `onboarding-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Onboard User" }
+        payload: { email: `onboarding-${randomUUID()}@example.com`, password: "validpassword1" }
       });
       const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
 
@@ -976,7 +960,7 @@ describe("auth routes", () => {
       const registerResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: `avatar-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Avatar User" }
+        payload: { email: `avatar-${randomUUID()}@example.com`, password: "validpassword1" }
       });
       const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
 
@@ -1021,7 +1005,7 @@ describe("auth routes", () => {
       const registerResponse = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email: `del-avatar-${randomUUID()}@example.com`, password: "validpassword1", displayName: "Del User" }
+        payload: { email: `del-avatar-${randomUUID()}@example.com`, password: "validpassword1" }
       });
       const token = extractCookieValue(registerResponse.headers["set-cookie"], "fg_session");
 

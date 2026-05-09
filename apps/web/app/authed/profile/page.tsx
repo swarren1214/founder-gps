@@ -7,14 +7,17 @@ import {
   BadgeCheck,
   CircleX,
   FileText,
+  Mail,
   ImagePlus,
   MapPin,
+  Phone,
   UploadCloud,
   User,
   UserCircle2,
   Users,
   Briefcase,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 import { useMemo, useRef, useState, useTransition, type DragEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -25,12 +28,14 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuthUser } from "@/hooks/use-auth-user";
+import { broadcastAuthUserRefresh, useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 
 type ProfileFormState = {
   firstName: string;
   lastName: string;
+  email: string;
+  phone: string;
   roleTitle: string;
   bio: string;
   address: string;
@@ -38,6 +43,24 @@ type ProfileFormState = {
 
 function emptySafe(value: string | null | undefined): string {
   return value ?? "";
+}
+
+function normalizePhoneDigits(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 10);
+}
+
+function formatPhone(value: string): string {
+  const digits = normalizePhoneDigits(value);
+
+  if (digits.length <= 3) {
+    return digits;
+  }
+
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  }
+
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 export default function ProfilePage() {
@@ -68,6 +91,16 @@ export default function ProfilePage() {
     return {
       firstName: emptySafe(authUser.profile.firstName),
       lastName: emptySafe(authUser.profile.lastName),
+      email: emptySafe(authUser.user.email),
+      phone: formatPhone(
+        emptySafe(
+          typeof authUser.profile.onboardingContext?.identity === "object" &&
+            authUser.profile.onboardingContext.identity !== null &&
+            "phone" in authUser.profile.onboardingContext.identity
+            ? String((authUser.profile.onboardingContext.identity as Record<string, unknown>).phone ?? "")
+            : ""
+        )
+      ),
       roleTitle: emptySafe(authUser.profile.roleTitle),
       bio: emptySafe(authUser.profile.bio),
       address: emptySafe(authUser.profile.locationCity)
@@ -75,28 +108,58 @@ export default function ProfilePage() {
   }, [authUser]);
 
   const [form, setForm] = useState<ProfileFormState | null>(null);
+  const [savedFormSnapshot, setSavedFormSnapshot] = useState<ProfileFormState | null>(null);
 
-  if (form === null && initialForm !== null) {
-    setForm(initialForm);
+  if (initialForm !== null) {
+    if (form === null) {
+      setForm(initialForm);
+    }
+
+    if (savedFormSnapshot === null) {
+      setSavedFormSnapshot(initialForm);
+    }
   }
 
   function updateField<K extends keyof ProfileFormState>(key: K, value: ProfileFormState[K]) {
     setForm((current) => (current ? { ...current, [key]: value } : current));
   }
 
-  function buildInitials(name: string) {
-    const initials = name
-      .split(" ")
-      .map((part) => part[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
+  const hasProfileChanges = useMemo(() => {
+    if (!form || !savedFormSnapshot) {
+      return false;
+    }
 
-    return initials || "FG";
+    return (
+      form.firstName !== savedFormSnapshot.firstName ||
+      form.lastName !== savedFormSnapshot.lastName ||
+      form.email !== savedFormSnapshot.email ||
+      normalizePhoneDigits(form.phone) !== normalizePhoneDigits(savedFormSnapshot.phone) ||
+      form.address !== savedFormSnapshot.address ||
+      form.roleTitle !== savedFormSnapshot.roleTitle ||
+      form.bio !== savedFormSnapshot.bio
+    );
+  }, [form, savedFormSnapshot]);
+
+  function humanizeEmailHandle(email: string | null | undefined): string {
+    if (!email) {
+      return "Founder";
+    }
+
+    const handle = email.split("@")[0]?.trim();
+    if (!handle) {
+      return "Founder";
+    }
+
+    return handle
+      .replace(/[._-]+/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
   }
 
   function saveProfile() {
-    if (!form) {
+    if (!form || !authUser) {
       return;
     }
 
@@ -111,7 +174,20 @@ export default function ProfilePage() {
             lastName: form.lastName || null,
             roleTitle: form.roleTitle || null,
             bio: form.bio || null,
-            locationCity: form.address || null
+            locationCity: form.address || null,
+            onboardingContext: {
+              ...authUser.profile.onboardingContext,
+              identity: {
+                ...(typeof authUser.profile.onboardingContext?.identity === "object" &&
+                authUser.profile.onboardingContext.identity !== null
+                  ? (authUser.profile.onboardingContext.identity as Record<string, unknown>)
+                  : {}),
+                firstName: form.firstName,
+                lastName: form.lastName,
+                email: form.email,
+                phone: normalizePhoneDigits(form.phone)
+              }
+            }
           })
         });
 
@@ -120,7 +196,9 @@ export default function ProfilePage() {
           throw new Error(payload?.error?.message ?? payload?.error ?? "Failed to save profile.");
         }
 
+        setSavedFormSnapshot({ ...form, phone: formatPhone(form.phone) });
         setNotice("Profile saved.");
+        broadcastAuthUserRefresh();
         router.refresh();
       } catch (error) {
         setNotice(error instanceof Error ? error.message : "Failed to save profile.");
@@ -154,7 +232,8 @@ export default function ProfilePage() {
         if (avatarInputRef.current) {
           avatarInputRef.current.value = "";
         }
-        setAvatarNotice("Avatar uploaded.");
+        setAvatarNotice(null);
+        broadcastAuthUserRefresh();
         router.refresh();
       } catch (error) {
         setAvatarNotice(error instanceof Error ? error.message : "Failed to upload avatar.");
@@ -177,6 +256,7 @@ export default function ProfilePage() {
           avatarInputRef.current.value = "";
         }
         setAvatarNotice("Avatar removed.");
+        broadcastAuthUserRefresh();
         router.refresh();
       } catch (error) {
         setAvatarNotice(error instanceof Error ? error.message : "Failed to remove avatar.");
@@ -204,7 +284,7 @@ export default function ProfilePage() {
     }
 
     setAvatarFile(file);
-    setAvatarNotice(`Selected ${file.name}`);
+    setAvatarNotice(null);
   }
 
   function handleAvatarChange(file: File | null) {
@@ -230,6 +310,19 @@ export default function ProfilePage() {
     );
   }
 
+  const personName = [authUser.profile.firstName, authUser.profile.lastName].filter(Boolean).join(" ").trim();
+  const companyName = authUser.profile.companyName?.trim() ?? "";
+  const emailBasedName = humanizeEmailHandle(authUser.user.email);
+  const avatarDisplayName = personName || companyName || emailBasedName;
+  const avatarFallbackInitials = avatarDisplayName
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  const hasStoredAvatar = Boolean(authUser.profile.avatarUrl || authUser.profile.avatarStorageKey);
+  const shouldShowAvatarNotice = Boolean(avatarNotice && !avatarNotice.startsWith("Selected "));
+
   return (
     <main className="page-shell min-h-screen bg-linear-to-b from-background to-muted/30 px-5 py-10 md:px-10 lg:px-14">
       <div className="mx-auto max-w-5xl space-y-4">
@@ -247,27 +340,38 @@ export default function ProfilePage() {
         </div>
 
         <Card className="border-border/80 bg-card/95 shadow-2xl">
-          <CardTitle className="flex items-center gap-2">
-            <UserCircle2 className="h-5 w-5 text-secondary" />
-            Account profile settings
-          </CardTitle>
-          <CardDescription className="mt-2">
-            Manage your account details, onboarding status, and avatar.
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <UserCircle2 className="h-5 w-5 text-secondary" />
+                Account profile settings
+              </CardTitle>
+              <CardDescription className="mt-2">
+                Manage your account details, onboarding status, and avatar.
+              </CardDescription>
+            </div>
+
+            {hasProfileChanges ? (
+              <Button type="button" onClick={saveProfile} disabled={isSaving}>
+                <UserCircle2 className="h-4 w-4" />
+                {isSaving ? "Saving..." : "Save profile"}
+              </Button>
+            ) : null}
+          </div>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-[320px_1fr]">
-            <section className="rounded-2xl border border-border/70 bg-muted/30 p-4">
+            <section className="flex h-full flex-col rounded-2xl border border-border/70 bg-muted/30 p-4">
               <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 <ImagePlus className="h-3.5 w-3.5" />
                 Avatar
               </p>
-              <div className="mt-4 flex items-center gap-3">
-                <Avatar className="size-16 border border-border/70">
-                  <AvatarImage src={authUser.profile.avatarUrl ?? undefined} alt={authUser.profile.displayName} />
-                  <AvatarFallback>{buildInitials(authUser.profile.displayName)}</AvatarFallback>
+              <div className="mt-4 flex flex-col items-center gap-3 text-center">
+                <Avatar className="size-32 border border-border/70">
+                  <AvatarImage src={authUser.profile.avatarUrl ?? undefined} alt={avatarDisplayName} />
+                  <AvatarFallback>{avatarFallbackInitials}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="text-sm font-medium text-foreground">{authUser.profile.displayName}</p>
+                  <p className="text-sm font-medium text-foreground">{avatarDisplayName}</p>
                   <p className="text-xs text-muted-foreground">PNG, JPG, WEBP, GIF up to 2MB</p>
                 </div>
               </div>
@@ -302,9 +406,6 @@ export default function ProfilePage() {
                 <UploadCloud className="mx-auto h-6 w-6 text-muted-foreground" />
                 <p className="mt-2 text-sm font-medium">Drag and drop an avatar</p>
                 <p className="mt-1 text-xs text-muted-foreground">or click to browse files</p>
-                <p className="mt-2 truncate text-xs text-muted-foreground">
-                  {avatarFile ? `Selected: ${avatarFile.name}` : "No file selected"}
-                </p>
                 <Button
                   type="button"
                   size="sm"
@@ -334,6 +435,7 @@ export default function ProfilePage() {
                     type="button"
                     variant="ghost"
                     size="icon-xs"
+                    className="rounded-md"
                     aria-label="Clear selected file"
                     onClick={() => {
                       setAvatarFile(null);
@@ -343,47 +445,42 @@ export default function ProfilePage() {
                       }
                     }}
                   >
-                    <CircleX className="h-3.5 w-3.5" />
+                    <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               ) : null}
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={uploadAvatar}
-                  disabled={isUploadingAvatar || !avatarFile}
-                >
-                  <UploadCloud className="h-4 w-4" />
-                  {isUploadingAvatar ? "Uploading..." : "Upload avatar"}
-                </Button>
-                <Button type="button" variant="ghost" onClick={removeAvatar} disabled={isRemovingAvatar}>
-                  <Trash2 className="h-4 w-4" />
-                  {isRemovingAvatar ? "Removing..." : "Remove"}
-                </Button>
-              </div>
-
-              {avatarNotice ? (
+              {shouldShowAvatarNotice ? (
                 <Alert className="mt-3 border-border/70 bg-background/70">
                   <AlertDescription>{avatarNotice}</AlertDescription>
                 </Alert>
+              ) : null}
+
+              {avatarFile || hasStoredAvatar ? (
+                <div className="mt-auto pt-4 flex flex-wrap gap-2">
+                  {avatarFile ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={uploadAvatar}
+                      disabled={isUploadingAvatar}
+                    >
+                      <UploadCloud className="h-4 w-4" />
+                      {isUploadingAvatar ? "Uploading..." : "Upload avatar"}
+                    </Button>
+                  ) : null}
+                  {hasStoredAvatar ? (
+                    <Button type="button" variant="ghost" onClick={removeAvatar} disabled={isRemovingAvatar}>
+                      <Trash2 className="h-4 w-4" />
+                      {isRemovingAvatar ? "Removing..." : "Remove"}
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
             </section>
 
             <section className="rounded-2xl border border-border/70 bg-background/70 p-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="address" className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                    Address
-                  </Label>
-                  <Input
-                    id="address"
-                    value={form.address}
-                    onChange={(event) => updateField("address", event.target.value)}
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="firstName" className="flex items-center gap-1.5">
                     <User className="h-3.5 w-3.5 text-muted-foreground" />
@@ -391,7 +488,7 @@ export default function ProfilePage() {
                   </Label>
                   <Input
                     id="firstName"
-                    value={form.firstName}
+                    value={form.firstName ?? ""}
                     onChange={(event) => updateField("firstName", event.target.value)}
                   />
                 </div>
@@ -402,8 +499,39 @@ export default function ProfilePage() {
                   </Label>
                   <Input
                     id="lastName"
-                    value={form.lastName}
+                    value={form.lastName ?? ""}
                     onChange={(event) => updateField("lastName", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                    Email
+                  </Label>
+                  <Input id="email" value={form.email ?? ""} disabled readOnly />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                    Phone
+                  </Label>
+                  <Input
+                    id="phone"
+                    value={form.phone ?? ""}
+                    inputMode="tel"
+                    placeholder="(555) 123-4567"
+                    onChange={(event) => updateField("phone", formatPhone(event.target.value))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address" className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                    Address
+                  </Label>
+                  <Input
+                    id="address"
+                    value={form.address ?? ""}
+                    onChange={(event) => updateField("address", event.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -413,7 +541,7 @@ export default function ProfilePage() {
                   </Label>
                   <Input
                     id="roleTitle"
-                    value={form.roleTitle}
+                    value={form.roleTitle ?? ""}
                     onChange={(event) => updateField("roleTitle", event.target.value)}
                   />
                 </div>
@@ -425,7 +553,7 @@ export default function ProfilePage() {
                   <Textarea
                     id="bio"
                     rows={6}
-                    value={form.bio}
+                    value={form.bio ?? ""}
                     onChange={(event) => updateField("bio", event.target.value)}
                   />
                 </div>
@@ -436,13 +564,6 @@ export default function ProfilePage() {
                   <AlertDescription>{notice}</AlertDescription>
                 </Alert>
               ) : null}
-
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Button type="button" size="lg" onClick={saveProfile} disabled={isSaving}>
-                  <UserCircle2 className="h-4 w-4" />
-                  {isSaving ? "Saving..." : "Save profile"}
-                </Button>
-              </div>
             </section>
           </div>
         </Card>

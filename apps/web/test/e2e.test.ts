@@ -359,13 +359,12 @@ describe("Auth Service E2E", () => {
       const response = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: "securepassword1", displayName: "E2E Founder" })
+        body: JSON.stringify({ email, password: "securepassword1" })
       });
 
       expect(response.status).toBe(200);
       const body = await response.json();
       expect(body.user.email).toBe(email);
-      expect(body.profile.displayName).toBe("E2E Founder");
       expect(body.profile.onboardingStatus).toBe("not_started");
       expect(body.user.passwordHash).toBeUndefined();
 
@@ -376,7 +375,7 @@ describe("Auth Service E2E", () => {
 
     it("rejects duplicate registration for the same email", async () => {
       const email = uniqueEmail();
-      const payload = { email, password: "securepassword1", displayName: "Dup User" };
+      const payload = { email, password: "securepassword1" };
 
       const first = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
         method: "POST",
@@ -411,7 +410,7 @@ describe("Auth Service E2E", () => {
       await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, displayName: "Login Founder" })
+        body: JSON.stringify({ email, password })
       });
 
       const loginResponse = await fetch(`${AUTH_SERVICE_URL}/auth/login`, {
@@ -432,7 +431,7 @@ describe("Auth Service E2E", () => {
       await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: "correctpassword1", displayName: "Wrong Pwd User" })
+        body: JSON.stringify({ email, password: "correctpassword1" })
       });
 
       const response = await fetch(`${AUTH_SERVICE_URL}/auth/login`, {
@@ -449,7 +448,7 @@ describe("Auth Service E2E", () => {
       const response = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: "securepassword1", displayName: "Protected User" })
+        body: JSON.stringify({ email, password: "securepassword1" })
       });
       const cookie = response.headers.get("set-cookie");
       return extractSetCookieValue(cookie, AUTH_COOKIE_NAME) ?? "";
@@ -492,7 +491,6 @@ describe("Auth Service E2E", () => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          displayName: "Updated Name",
           locationCity: "Lehi",
           companyName: "Acme Startup",
           onboardingStatus: "completed"
@@ -501,7 +499,6 @@ describe("Auth Service E2E", () => {
 
       expect(patchResponse.status).toBe(200);
       const body = await patchResponse.json();
-      expect(body.profile.displayName).toBe("Updated Name");
       expect(body.profile.locationCity).toBe("Lehi");
       expect(body.profile.companyName).toBe("Acme Startup");
       expect(body.profile.onboardingStatus).toBe("completed");
@@ -512,7 +509,7 @@ describe("Auth Service E2E", () => {
       const response = await fetch(`${AUTH_SERVICE_URL}/profile`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: "Hacker" })
+        body: JSON.stringify({ locationCity: "Hacker City" })
       });
       expect(response.status).toBe(401);
     });
@@ -524,7 +521,7 @@ describe("Auth Service E2E", () => {
       const registerResponse = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: "securepassword1", displayName: "Logout User" })
+        body: JSON.stringify({ email, password: "securepassword1" })
       });
       const token = extractSetCookieValue(registerResponse.headers.get("set-cookie"), AUTH_COOKIE_NAME);
       expect(token).toBeTruthy();
@@ -555,7 +552,7 @@ describe("Auth Service E2E", () => {
       const registerResponse = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: "securepassword1", displayName: "Avatar E2E User" })
+        body: JSON.stringify({ email, password: "securepassword1" })
       });
       const token = extractSetCookieValue(registerResponse.headers.get("set-cookie"), AUTH_COOKIE_NAME);
 
@@ -605,7 +602,7 @@ describe("Auth Service E2E", () => {
       const registerResponse = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: "securepassword1", displayName: "Bad Upload User" })
+        body: JSON.stringify({ email, password: "securepassword1" })
       });
       const token = extractSetCookieValue(registerResponse.headers.get("set-cookie"), AUTH_COOKIE_NAME);
 

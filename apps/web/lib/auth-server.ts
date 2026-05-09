@@ -15,7 +15,6 @@ export type AuthenticatedUser = {
   profile: {
     id: string;
     userId: string;
-    displayName: string;
     firstName: string | null;
     lastName: string | null;
     companyName: string | null;

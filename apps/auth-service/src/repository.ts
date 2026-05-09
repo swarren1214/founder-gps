@@ -47,7 +47,6 @@ export type AuthUser = {
 export type UserProfile = {
   id: string;
   userId: string;
-  displayName: string;
   firstName: string | null;
   lastName: string | null;
   companyName: string | null;
@@ -88,7 +87,6 @@ function toUserProfile(row: Record<string, unknown>): UserProfile {
   return {
     id: String(row.id),
     userId: String(row.user_id),
-    displayName: String(row.display_name),
     firstName: row.first_name ? String(row.first_name) : null,
     lastName: row.last_name ? String(row.last_name) : null,
     companyName: row.company_name ? String(row.company_name) : null,
@@ -126,7 +124,6 @@ export interface AuthRepository {
   createUserWithProfile(params: {
     email: string;
     passwordHash: string;
-    displayName: string;
   }): Promise<{ user: AuthUser; profile: UserProfile }>;
   getUserByEmail(email: string): Promise<AuthUser | null>;
   getUserById(id: string): Promise<AuthUser | null>;
@@ -146,7 +143,6 @@ export class PgAuthRepository implements AuthRepository {
   async createUserWithProfile(params: {
     email: string;
     passwordHash: string;
-    displayName: string;
   }): Promise<{ user: AuthUser; profile: UserProfile }> {
     const client = await this.pool.connect();
     try {
@@ -165,12 +161,11 @@ export class PgAuthRepository implements AuthRepository {
 
       const profileInsert = await client.query(
         `
-          INSERT INTO user_profiles (user_id, display_name)
-          VALUES ($1, $2)
+          INSERT INTO user_profiles (user_id)
+          VALUES ($1)
           RETURNING
             id,
             user_id,
-            display_name,
             first_name,
             last_name,
             company_name,
@@ -185,7 +180,7 @@ export class PgAuthRepository implements AuthRepository {
             created_at,
             updated_at
         `,
-        [user.id, params.displayName]
+        [user.id]
       );
 
       const profile = toUserProfile(profileInsert.rows[0]);
@@ -240,7 +235,6 @@ export class PgAuthRepository implements AuthRepository {
         SELECT
           id,
           user_id,
-          display_name,
           first_name,
           last_name,
           company_name,
@@ -285,7 +279,6 @@ export class PgAuthRepository implements AuthRepository {
         RETURNING
           id,
           user_id,
-          display_name,
           first_name,
           last_name,
           company_name,
@@ -319,7 +312,6 @@ export class PgAuthRepository implements AuthRepository {
         RETURNING
           id,
           user_id,
-          display_name,
           first_name,
           last_name,
           company_name,
@@ -353,7 +345,6 @@ export class PgAuthRepository implements AuthRepository {
     const values: unknown[] = [];
 
     const map: Array<[keyof UpdateProfileRequest, string]> = [
-      ["displayName", "display_name"],
       ["firstName", "first_name"],
       ["lastName", "last_name"],
       ["companyName", "company_name"],
@@ -390,7 +381,6 @@ export class PgAuthRepository implements AuthRepository {
         RETURNING
           id,
           user_id,
-          display_name,
           first_name,
           last_name,
           company_name,

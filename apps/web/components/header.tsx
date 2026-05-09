@@ -4,7 +4,7 @@ import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -15,11 +15,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { Moon, Sun } from "lucide-react";
+import { LogOut, Moon, Sun, User } from "lucide-react";
 import { useAuthUser } from "@/hooks/use-auth-user";
 
 export function Header() {
   const router = useRouter();
+  const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
   const { authUser } = useAuthUser();
   const [mounted, setMounted] = useState(false);
@@ -29,6 +30,14 @@ export function Header() {
   }, []);
 
   if (!mounted) return null;
+  if (
+    pathname === "/login" ||
+    pathname === "/register" ||
+    pathname === "/onboarding" ||
+    pathname.startsWith("/authed/onboarding")
+  ) {
+    return null;
+  }
 
   const isDark = resolvedTheme === "dark";
   const profileHref = "/authed/profile";
@@ -53,14 +62,9 @@ export function Header() {
 
   const avatarUrl = authUser?.profile.avatarUrl ?? undefined;
   const personName = [authUser?.profile.firstName, authUser?.profile.lastName].filter(Boolean).join(" ").trim();
-  const profileDisplayName = authUser?.profile.displayName?.trim() ?? "";
   const companyName = authUser?.profile.companyName?.trim() ?? "";
   const emailBasedName = humanizeEmailHandle(authUser?.user.email);
-  const displayLooksLikeCompany =
-    profileDisplayName.length > 0 &&
-    companyName.length > 0 &&
-    profileDisplayName.toLowerCase() === companyName.toLowerCase();
-  const displayName = personName || (displayLooksLikeCompany ? emailBasedName : profileDisplayName) || emailBasedName;
+  const displayName = personName || companyName || emailBasedName;
   const fallbackInitials = displayName
     .split(" ")
     .map((part) => part[0])
@@ -75,7 +79,7 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className="flex h-16 items-center justify-between px-4 md:px-6 lg:px-8">
         {/* Logo */}
         <div className="flex items-center">
@@ -127,9 +131,15 @@ export function Header() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href={profileHref}>Profile</Link>
+                <Link href={profileHref} className="flex items-center gap-2">
+                  <User className="h-4 w-4" aria-hidden="true" />
+                  <span>Profile</span>
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={handleLogout}>Logout</DropdownMenuItem>
+              <DropdownMenuItem onSelect={handleLogout}>
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                <span>Logout</span>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
