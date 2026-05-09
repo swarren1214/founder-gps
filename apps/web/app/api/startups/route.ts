@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { isSameOriginRequest } from "@/lib/request-security";
+import { getResourceServiceUrl } from "@/lib/service-urls";
 
-const resourceServiceUrl = process.env.NEXT_PUBLIC_RESOURCE_SERVICE_URL ?? "http://localhost:4001";
+const resourceServiceUrl = getResourceServiceUrl();
 
 function generateRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;

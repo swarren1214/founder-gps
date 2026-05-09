@@ -8,9 +8,10 @@ import {
   type RoadmapTaskPlan
 } from "@/lib/schemas";
 import { getAuthServiceUrl } from "@/lib/auth-service";
+import { getResourceServiceUrl } from "@/lib/service-urls";
 
 const ROADMAP_MODEL = process.env.OPENAI_ROADMAP_MODEL ?? process.env.AI_MODEL ?? "gpt-4o-mini";
-const RESOURCE_SERVICE_URL = process.env.NEXT_PUBLIC_RESOURCE_SERVICE_URL ?? "http://localhost:4001";
+const RESOURCE_SERVICE_URL = getResourceServiceUrl();
 const MODEL_TIMEOUT_MS = 20000;
 
 function getChatCompletionsUrl(): string {

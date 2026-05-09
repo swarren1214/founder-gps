@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getIntelligenceServiceUrl } from "@/lib/service-urls";
 
 type MapChatRequest = {
   query: string;
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const intelligenceServiceUrl = process.env.INTELLIGENCE_SERVICE_URL || "http://localhost:4003";
+    const intelligenceServiceUrl = getIntelligenceServiceUrl();
 
     const response = await fetch(`${intelligenceServiceUrl}/intelligence/map-chat`, {
       method: "POST",

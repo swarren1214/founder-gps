@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatRequestSchema, chatResponseSchema, type ChatRequest } from "../../../lib/schemas";
+import { getIntelligenceServiceUrl } from "@/lib/service-urls";
 
-const intelligenceServiceUrl = process.env.NEXT_PUBLIC_INTELLIGENCE_SERVICE_URL ?? "http://localhost:4003";
+const intelligenceServiceUrl = getIntelligenceServiceUrl();
 const CHAT_TIMEOUT_MS = 10000;
 
 function generateRequestId(): string {

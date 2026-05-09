@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { founderFlowResponseSchema, founderIntakeSchema, type FounderIntake } from "@/lib/schemas";
 import type { StartupProfile, StartupResource } from "@founder-gps/shared-types";
+import {
+  getIntelligenceServiceUrl,
+  getRecommendationServiceUrl,
+  getResourceServiceUrl,
+  getRoutingServiceUrl
+} from "@/lib/service-urls";
 
 const serviceConfig = {
-  resource: process.env.NEXT_PUBLIC_RESOURCE_SERVICE_URL ?? "http://localhost:4001",
-  intelligence: process.env.NEXT_PUBLIC_INTELLIGENCE_SERVICE_URL ?? "http://localhost:4003",
-  recommendation: process.env.NEXT_PUBLIC_RECOMMENDATION_SERVICE_URL ?? "http://localhost:4004",
-  routing: process.env.NEXT_PUBLIC_ROUTING_SERVICE_URL ?? "http://localhost:4002"
+  resource: getResourceServiceUrl(),
+  intelligence: getIntelligenceServiceUrl(),
+  recommendation: getRecommendationServiceUrl(),
+  routing: getRoutingServiceUrl()
 };
 
 // Generate a unique request ID for traceability across service calls
