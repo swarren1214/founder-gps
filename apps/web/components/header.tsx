@@ -32,8 +32,35 @@ export function Header() {
 
   const isDark = resolvedTheme === "dark";
   const profileHref = "/authed/profile";
+
+  function humanizeEmailHandle(email: string | null | undefined): string {
+    if (!email) {
+      return "Founder";
+    }
+
+    const handle = email.split("@")[0]?.trim();
+    if (!handle) {
+      return "Founder";
+    }
+
+    return handle
+      .replace(/[._-]+/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
   const avatarUrl = authUser?.profile.avatarUrl ?? undefined;
-  const displayName = authUser?.profile.displayName ?? "Founder";
+  const personName = [authUser?.profile.firstName, authUser?.profile.lastName].filter(Boolean).join(" ").trim();
+  const profileDisplayName = authUser?.profile.displayName?.trim() ?? "";
+  const companyName = authUser?.profile.companyName?.trim() ?? "";
+  const emailBasedName = humanizeEmailHandle(authUser?.user.email);
+  const displayLooksLikeCompany =
+    profileDisplayName.length > 0 &&
+    companyName.length > 0 &&
+    profileDisplayName.toLowerCase() === companyName.toLowerCase();
+  const displayName = personName || (displayLooksLikeCompany ? emailBasedName : profileDisplayName) || emailBasedName;
   const fallbackInitials = displayName
     .split(" ")
     .map((part) => part[0])
@@ -65,6 +92,22 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Theme Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            className="h-9 w-9"
+            title={`Switch to ${isDark ? "light" : "dark"} mode`}
+          >
+            {isDark ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+          
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="size-10 rounded-full p-0">
@@ -90,21 +133,6 @@ export function Header() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Theme Toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-            className="h-9 w-9"
-            title={`Switch to ${isDark ? "light" : "dark"} mode`}
-          >
-            {isDark ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
-            <span className="sr-only">Toggle theme</span>
-          </Button>
         </div>
       </div>
     </header>

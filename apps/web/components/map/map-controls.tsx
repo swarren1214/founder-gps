@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Crosshair, Minus, Plus, Search } from "lucide-react";
+import { ArrowRight, Crosshair, Minus, Plus, Search, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type MapControlsProps = {
   onZoomIn: () => void;
@@ -38,58 +40,73 @@ export function MapControls({
   }
 
   return (
-    <div className="pointer-events-auto absolute right-4 top-4 z-30 flex flex-col items-end gap-2">
-      {searchOpen ? (
-        <form
-          onSubmit={handleSubmit}
-          className="flex w-[240px] items-center gap-2 rounded-xl border border-border/70 bg-card/95 p-2 shadow-xl backdrop-blur"
-        >
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search place"
-            className="h-8 flex-1 rounded-md border border-border/70 bg-background px-2 text-sm outline-none focus:border-primary/50"
-            autoFocus
-          />
-          <Button type="submit" size="icon" variant="secondary" className="p-2" aria-label="Run map search" disabled={isSearching}>
-            <Search className="h-4 w-4" />
-          </Button>
-        </form>
-      ) : null}
-
-      <div className="flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card/95 shadow-xl backdrop-blur">
-        <Button type="button" size="icon" variant="ghost" className="p-2" aria-label="Zoom in" onClick={onZoomIn}>
-          <Plus className="h-4 w-4" />
-        </Button>
-        <div className="h-px bg-border/70" />
-        <Button type="button" size="icon" variant="ghost" className="p-2" aria-label="Zoom out" onClick={onZoomOut}>
-          <Minus className="h-4 w-4" />
-        </Button>
-      </div>
+    <div className="pointer-events-auto absolute right-4 top-4 z-30 flex flex-col items-end">
+      <AnimatePresence>
+        {searchOpen ? (
+          <motion.form
+            key="search-form"
+            onSubmit={handleSubmit}
+            className="absolute right-[calc(100%_+_8px)] top-0 w-[240px]"
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="relative flex items-center backdrop-blur">
+              <Search className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search place"
+                autoFocus
+                className="h-10 pl-9 pr-10 border-0 bg-transparent focus-visible:ring-0"
+              />
+              <Button type="submit" size="icon" variant="ghost" className="absolute right-1 h-8 w-8 p-0" aria-label="Run map search" disabled={isSearching}>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </motion.form>
+        ) : null}
+      </AnimatePresence>
 
       <div className="flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card/95 shadow-xl backdrop-blur">
         <Button
           type="button"
           size="icon"
           variant="ghost"
-          className="p-2"
+          className="p-4"
           aria-label="Search locations"
           onClick={() => setSearchOpen((open) => !open)}
           disabled={isSearching}
         >
-          <Search className="h-4 w-4" />
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          {searchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+        </motion.div>
         </Button>
         <div className="h-px bg-border/70" />
         <Button
           type="button"
           size="icon"
           variant="ghost"
-          className="p-2"
+          className="p-4"
           aria-label="Use current location"
           onClick={onLocate}
           disabled={isLocating}
         >
           <Crosshair className={`h-4 w-4 ${isLocating ? "animate-pulse" : ""}`} />
+        </Button>
+        <div className="h-px bg-border/70" />
+        <Button type="button" size="icon" variant="ghost" className="p-4" aria-label="Zoom in" onClick={onZoomIn}>
+          <Plus className="h-4 w-4" />
+        </Button>
+        <div className="h-px bg-border/70" />
+        <Button type="button" size="icon" variant="ghost" className="p-4" aria-label="Zoom out" onClick={onZoomOut}>
+          <Minus className="h-4 w-4" />
         </Button>
       </div>
     </div>

@@ -40,8 +40,9 @@ export function explainRecommendationPrompt() {
   return [
     "You are Founder GPS intelligence service.",
     "Return strict JSON only.",
-    "Explain why recommendation matters in plain language for founders.",
-    "Keep explanations concise and actionable."
+    "Frame recommendations as actionable next steps, not just explanations of relevance.",
+    "Focus on WHAT the founder should do and WHY it matters for their current goals.",
+    "Avoid technical scoring details. Keep explanations concise and practical."
   ].join(" ");
 }
 

@@ -33,6 +33,7 @@ export async function recommendationRoutes(
       founderProfile: parsed.data.founderProfile,
       founderAnalysis: parsed.data.founderAnalysis,
       resources: parsed.data.resources,
+      startups: parsed.data.startups,
       topN: parsed.data.topN
     });
 

@@ -226,6 +226,15 @@ export async function POST(request: Request) {
             },
             founderAnalysis: analysisPayload.analysis,
             resources,
+            startups: startups.map((startup) => ({
+              id: startup.id,
+              name: startup.name,
+              sector: startup.sector,
+              city: startup.city,
+              description: startup.description,
+              stageKeywords: startup.stageKeywords,
+              hiringStatus: startup.hiringStatus
+            })),
             topN: founderProfile.topN
           }),
           timeout: 8000

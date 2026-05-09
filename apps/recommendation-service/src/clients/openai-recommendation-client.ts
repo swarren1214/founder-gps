@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { FounderAnalysis, FounderProfileInput, StartupResource } from "../types.js";
+import type {
+  FounderAnalysis,
+  FounderProfileInput,
+  StartupProfileContext,
+  StartupResource
+} from "../types.js";
 
 const llmResponseSchema = z.object({
   recommendations: z.array(
@@ -16,6 +21,7 @@ export interface LlmRecommendationClient {
     founderProfile: FounderProfileInput;
     founderAnalysis: FounderAnalysis;
     resources: StartupResource[];
+    startups: StartupProfileContext[];
     topN: number;
   }): Promise<Array<{ resourceId: string; reason: string; recommendedAction: string }>>;
 }
@@ -33,6 +39,7 @@ export class OpenAiRecommendationClient implements LlmRecommendationClient {
     founderProfile: FounderProfileInput;
     founderAnalysis: FounderAnalysis;
     resources: StartupResource[];
+    startups: StartupProfileContext[];
     topN: number;
   }): Promise<Array<{ resourceId: string; reason: string; recommendedAction: string }>> {
     const trimmedResources = params.resources.slice(0, 60).map((resource) => ({
@@ -44,6 +51,16 @@ export class OpenAiRecommendationClient implements LlmRecommendationClient {
       industryFit: resource.industryFit,
       tags: resource.tags,
       description: resource.description
+    }));
+
+    const trimmedStartups = params.startups.slice(0, 120).map((startup) => ({
+      id: startup.id,
+      name: startup.name,
+      sector: startup.sector,
+      city: startup.city,
+      description: startup.description,
+      stageKeywords: startup.stageKeywords,
+      hiringStatus: startup.hiringStatus
     }));
 
     const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
@@ -83,7 +100,8 @@ export class OpenAiRecommendationClient implements LlmRecommendationClient {
                 suggestedFocus: params.founderAnalysis.suggestedFocus,
                 risks: params.founderAnalysis.risks
               },
-              resources: trimmedResources
+              resources: trimmedResources,
+              startups: trimmedStartups
             })
           }
         ],

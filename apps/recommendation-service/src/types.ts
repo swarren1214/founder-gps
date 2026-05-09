@@ -46,6 +46,16 @@ export const StartupResourceSchema = z.object({
   updatedAt: z.string()
 });
 
+export const StartupProfileContextSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  sector: z.string().nullable(),
+  city: z.string(),
+  description: z.string().nullable(),
+  stageKeywords: z.array(z.string()),
+  hiringStatus: z.string().nullable()
+});
+
 export const RecommendationSchema = z.object({
   id: z.string().uuid(),
   founderProfileId: z.string().uuid(),
@@ -83,12 +93,14 @@ export const RankRecommendationsRequestSchema = z.object({
   founderProfile: FounderProfileInputSchema,
   founderAnalysis: FounderAnalysisSchema,
   resources: z.array(StartupResourceSchema).min(1),
+  startups: z.array(StartupProfileContextSchema).default([]),
   topN: z.number().int().min(1).max(20).default(10)
 });
 
 export type FounderProfileInput = z.infer<typeof FounderProfileInputSchema>;
 export type FounderAnalysis = z.infer<typeof FounderAnalysisSchema>;
 export type StartupResource = z.infer<typeof StartupResourceSchema>;
+export type StartupProfileContext = z.infer<typeof StartupProfileContextSchema>;
 export type Recommendation = z.infer<typeof RecommendationSchema>;
 export type GenerateRecommendationsRequest = z.infer<typeof GenerateRecommendationsRequestSchema>;
 export type RankRecommendationsRequest = z.infer<typeof RankRecommendationsRequestSchema>;

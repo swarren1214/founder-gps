@@ -2,10 +2,32 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ArrowLeft, Building2, Compass, ExternalLink, MapPin, RefreshCw, Route, Sparkles, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Building2,
+  Compass,
+  ExternalLink,
+  MapPin,
+  RefreshCw,
+  Route,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Users
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { filterResources, filterStartups } from "@/lib/map-filters";
 import { RoadmapTaskManager } from "@/components/dashboard/roadmap-task-manager";
 import { TabsContent } from "@/components/ui/tabs";
@@ -24,6 +46,7 @@ type DashboardControlsProps = {
   onStartupSelect?: (startupId: string) => void;
   onStartupClear?: () => void;
   onResourceSelect?: (resourceId: string) => void;
+  onResourceClear?: () => void;
   activeTab?: string;
   activeFilters?: MapFilters | null;
   onClearFilter?: () => void;
@@ -112,17 +135,69 @@ export function DashboardControls({
   onStartupSelect,
   onStartupClear,
   onResourceSelect,
+  onResourceClear,
   activeTab = "overview",
   activeFilters = null,
   onClearFilter
 }: DashboardControlsProps) {
   const containerRef = useRef<HTMLElement | null>(null);
   const [logoLoadFailures, setLogoLoadFailures] = useState<Record<string, boolean>>({});
+  const [startupSearchQuery, setStartupSearchQuery] = useState("");
+  const [startupSectorFilter, setStartupSectorFilter] = useState("all");
+  const [startupEmployeeFilter, setStartupEmployeeFilter] = useState("all");
+  const [startupFiltersExpanded, setStartupFiltersExpanded] = useState(false);
+  const [resourceSearchQuery, setResourceSearchQuery] = useState("");
+  const [resourceCategoryFilter, setResourceCategoryFilter] = useState("all");
+  const [resourceStateFilter, setResourceStateFilter] = useState("all");
+  const [resourceFiltersExpanded, setResourceFiltersExpanded] = useState(false);
   const { founderProfile, analysis, recommendations, route, startups, warnings } = run;
 
   const filteredStartups = filterStartups(startups, activeFilters);
   const filteredResources = filterResources(run.resources, activeFilters);
+  const startupSectorOptions = Array.from(
+    new Set(filteredStartups.map((startup) => startup.sector?.trim()).filter((value): value is string => Boolean(value)))
+  ).sort((left, right) => left.localeCompare(right));
+  const startupEmployeeOptions = Array.from(
+    new Set(filteredStartups.map((startup) => startup.employees?.trim()).filter((value): value is string => Boolean(value)))
+  ).sort((left, right) => left.localeCompare(right));
+  const resourceCategoryOptions = Array.from(
+    new Set(filteredResources.map((resource) => resource.category))
+  ).sort((left, right) => left.localeCompare(right));
+  const resourceStateOptions = Array.from(
+    new Set(filteredResources.map((resource) => resource.state?.trim()).filter((value): value is string => Boolean(value)))
+  ).sort((left, right) => left.localeCompare(right));
+
+  const displayedStartups = filteredStartups.filter((startup) => {
+    const normalizedSearch = startupSearchQuery.trim().toLowerCase();
+    const startupSector = startup.sector?.trim() ?? "";
+    const matchesSearch =
+      normalizedSearch.length === 0 ||
+      startup.name.toLowerCase().includes(normalizedSearch) ||
+      startupSector.toLowerCase().includes(normalizedSearch) ||
+      (startup.description ?? "").toLowerCase().includes(normalizedSearch);
+    const matchesSector = startupSectorFilter === "all" || startupSector.toLowerCase() === startupSectorFilter;
+    const matchesEmployees = startupEmployeeFilter === "all" || (startup.employees?.trim() ?? "") === startupEmployeeFilter;
+    return matchesSearch && matchesSector && matchesEmployees;
+  });
+
+  const displayedResources = filteredResources.filter((resource) => {
+    const normalizedSearch = resourceSearchQuery.trim().toLowerCase();
+    const categoryLabel = resource.category.replaceAll("_", " ").toLowerCase();
+    const matchesSearch =
+      normalizedSearch.length === 0 ||
+      resource.name.toLowerCase().includes(normalizedSearch) ||
+      resource.description.toLowerCase().includes(normalizedSearch) ||
+      categoryLabel.includes(normalizedSearch) ||
+      resource.city.toLowerCase().includes(normalizedSearch) ||
+      resource.state.toLowerCase().includes(normalizedSearch) ||
+      resource.tags.some((tag) => tag.toLowerCase().includes(normalizedSearch));
+    const matchesCategory = resourceCategoryFilter === "all" || resource.category === resourceCategoryFilter;
+    const matchesState = resourceStateFilter === "all" || resource.state.toLowerCase() === resourceStateFilter;
+    return matchesSearch && matchesCategory && matchesState;
+  });
   const selectedStartup = selectedStartupId ? startups.find((startup) => startup.id === selectedStartupId) ?? null : null;
+  const selectedResource =
+    selectedResourceId ? run.resources.find((resource) => resource.id === selectedResourceId) ?? null : null;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -192,7 +267,12 @@ export function DashboardControls({
                 <Sparkles className="h-4 w-4 text-secondary" />
                 <h4 className="text-base font-semibold">Priority recommendations</h4>
               </div>
-              <Badge className="bg-secondary/15 text-secondary">{recommendations.length} items</Badge>
+              <div className="flex items-center gap-2">
+                <Button type="button" size="icon" variant="ghost" onClick={onRetry} disabled={isRetrying}>
+                  <RefreshCw className={`h-4 w-4 ${isRetrying ? "animate-spin" : ""}`} />
+                </Button>
+                <Badge className="bg-secondary/15 text-secondary">{recommendations.length}</Badge>
+              </div>
             </div>
 
             <div className="space-y-2.5">
@@ -256,7 +336,13 @@ export function DashboardControls({
                 className="space-y-4"
               >
                 <div className="flex items-center gap-2">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => onStartupClear?.()} className="-ml-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onStartupClear?.()}
+                    className="-ml-2 rounded-full px-3"
+                  >
                     <ArrowLeft className="h-4 w-4" />
                     Back
                   </Button>
@@ -415,24 +501,114 @@ export function DashboardControls({
                     <h4 className="font-semibold">Startup profiles</h4>
                   </div>
 
+                  <div className="mb-3 rounded-xl border border-border/70 bg-background/40 p-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={startupSearchQuery}
+                          onChange={(event) => setStartupSearchQuery(event.target.value)}
+                          placeholder="Search startups"
+                          className="h-9 rounded-lg border-border/70 bg-background pl-9 pr-3"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setStartupFiltersExpanded((current) => !current)}
+                        className={cn(
+                          "h-9 w-9 rounded-lg border border-border/70 bg-background",
+                          startupFiltersExpanded && "border-primary/50 bg-primary/10 text-primary"
+                        )}
+                      >
+                        <SlidersHorizontal className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <AnimatePresence initial={false}>
+                      {startupFiltersExpanded ? (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0, marginTop: 0 }}
+                          animate={{ height: "auto", opacity: 1, marginTop: 8 }}
+                          exit={{ height: 0, opacity: 0, marginTop: 0 }}
+                          transition={{ duration: 0.2, ease: "easeOut" }}
+                          className="overflow-hidden"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={startupSectorFilter}
+                              onValueChange={(value) => setStartupSectorFilter(value)}
+                            >
+                              <SelectTrigger className="h-9 flex-1 rounded-lg border-border/70 bg-background text-xs uppercase tracking-[0.1em] text-muted-foreground">
+                                <SelectValue placeholder="All sectors" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All sectors</SelectItem>
+                                {startupSectorOptions.map((sector) => (
+                                  <SelectItem key={sector} value={sector.toLowerCase()}>
+                                    {sector}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={startupEmployeeFilter}
+                              onValueChange={(value) => setStartupEmployeeFilter(value)}
+                            >
+                              <SelectTrigger className="h-9 flex-1 rounded-lg border-border/70 bg-background text-xs uppercase tracking-[0.1em] text-muted-foreground">
+                                <SelectValue placeholder="All sizes" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All sizes</SelectItem>
+                                {startupEmployeeOptions.map((employees) => (
+                                  <SelectItem key={employees} value={employees}>
+                                    {employees}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {(startupSearchQuery || startupSectorFilter !== "all" || startupEmployeeFilter !== "all") ? (
+                              <Button
+                                type="button"
+                                variant="link"
+                                size="sm"
+                                onClick={() => {
+                                  setStartupSearchQuery("");
+                                  setStartupSectorFilter("all");
+                                  setStartupEmployeeFilter("all");
+                                }}
+                                className="h-9 shrink-0 px-2 text-xs"
+                              >
+                                Clear
+                              </Button>
+                            ) : null}
+                          </div>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  </div>
+
                   {activeFilters && !activeFilters.clearFilters ? (
                     <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
                       <Badge className="bg-primary/20 text-primary text-xs">
-                        {filteredStartups.length} of {startups.length} matching
+                        {displayedStartups.length} of {startups.length} matching
                       </Badge>
-                      <button
+                      <Button
                         type="button"
+                        variant="link"
+                        size="sm"
                         onClick={onClearFilter}
-                        className="ml-auto text-xs font-medium text-primary hover:underline"
+                        className="ml-auto h-auto px-0 text-xs"
                       >
                         Clear filter
-                      </button>
+                      </Button>
                     </div>
                   ) : null}
 
-                  {filteredStartups.length > 0 ? (
+                  {displayedStartups.length > 0 ? (
                     <div className="space-y-2">
-                      {filteredStartups.map((startup) => {
+                      {displayedStartups.map((startup) => {
                         const startupLogoSource = resolveLogoSource(
                           startup.logoUrl,
                           startup.website,
@@ -511,7 +687,9 @@ export function DashboardControls({
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">
-                      {activeFilters && !activeFilters.clearFilters ? "No startup profiles match the current filters." : "No startup profiles are available for this run."}
+                      {activeFilters && !activeFilters.clearFilters
+                        ? "No startup profiles match the current filters."
+                        : "No startup profiles match your search criteria."}
                     </div>
                   )}
                 </div>
@@ -544,62 +722,338 @@ export function DashboardControls({
         </TabsContent>
 
         <TabsContent value="resources" className="space-y-4">
-          <div className="mb-2 flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-primary" />
-            <h4 className="font-semibold">Map resources</h4>
-          </div>
-
-          {activeFilters && !activeFilters.clearFilters ? (
-            <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
-              <Badge className="bg-primary/20 text-primary text-xs">
-                {filteredResources.length} of {run.resources.length} matching
-              </Badge>
-              <button
-                type="button"
-                onClick={onClearFilter}
-                className="ml-auto text-xs font-medium text-primary hover:underline"
+          <AnimatePresence mode="wait" initial={false}>
+            {selectedResource ? (
+              <motion.div
+                key={`resource-detail-${selectedResource.id}`}
+                initial={{ opacity: 0, x: 28 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -28 }}
+                transition={{ duration: 0.22 }}
+                className="space-y-4"
               >
-                Clear filter
-              </button>
-            </div>
-          ) : null}
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onResourceClear?.()}
+                    className="-ml-2 rounded-full px-3"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </Button>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Resource profile</p>
+                </div>
 
-          <div className="rounded-2xl border border-border/70 bg-muted/35 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">Show resource pins</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Toggle pins on the map</p>
-              </div>
-              <button
-                type="button"
-                onClick={onTogglePins}
-                aria-pressed={showPins}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${showPins ? "bg-primary" : "bg-muted-foreground/30"}`}
-              >
-                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition-transform ${showPins ? "translate-x-5" : "translate-x-0"}`} />
-              </button>
-            </div>
-          </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/35 p-4">
+                  {(() => {
+                    const resourceLogoSource = resolveLogoSource(
+                      selectedResource.logoUrl,
+                      selectedResource.website,
+                      selectedResource.updatedAt,
+                      true
+                    );
+                    const resourceLogoSrc = resourceLogoSource ?? undefined;
+                    const logoKey = `${selectedResource.id}:${selectedResource.updatedAt ?? ""}`;
+                    const showLogoImage = Boolean(resourceLogoSrc) && !logoLoadFailures[logoKey];
 
-          <div className="space-y-2">
-            {filteredResources.map((resource) => (
-              <button
-                key={resource.id}
-                data-resource-id={resource.id}
-                type="button"
-                onClick={() => onResourceSelect?.(resource.id)}
-                className={cn(
-                  "w-full rounded-2xl border px-3 py-2.5 text-left transition-colors",
-                  selectedResourceId === resource.id
-                    ? "border-primary/60 bg-primary/12 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.18)]"
-                    : "border-border/70 bg-muted/35 hover:border-primary/30 hover:bg-muted/55"
-                )}
+                    return (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative h-11 w-11 shrink-0">
+                            {!showLogoImage ? (
+                              <div
+                                className="flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-white"
+                                style={{ backgroundColor: getStartupAvatarColor(selectedResource.name) }}
+                                aria-hidden="true"
+                              >
+                                {getStartupInitial(selectedResource.name)}
+                              </div>
+                            ) : null}
+                            {showLogoImage ? (
+                              <img
+                                src={resourceLogoSrc}
+                                alt={`${selectedResource.name} logo`}
+                                className="absolute inset-0 h-11 w-11 rounded-full bg-background/70 object-contain"
+                                loading="lazy"
+                                onLoad={() => {
+                                  setLogoLoadFailures((previous) => {
+                                    if (!previous[logoKey]) {
+                                      return previous;
+                                    }
+
+                                    const next = { ...previous };
+                                    delete next[logoKey];
+                                    return next;
+                                  });
+                                }}
+                                onError={() => {
+                                  setLogoLoadFailures((previous) => ({ ...previous, [logoKey]: true }));
+                                }}
+                              />
+                            ) : null}
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-foreground">{selectedResource.name}</h3>
+                            <p className="mt-1 text-sm text-muted-foreground capitalize">
+                              {selectedResource.category.replaceAll("_", " ")}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge className="bg-secondary/15 text-secondary capitalize">
+                          {selectedResource.category.replaceAll("_", " ")}
+                        </Badge>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Overview</p>
+                  <p className="mt-2 text-sm leading-6 text-foreground/90">{selectedResource.description}</p>
+                </div>
+
+                <div className="space-y-3">
+                  {(selectedResource.address || selectedResource.city || selectedResource.state) ? (
+                    <div className="rounded-2xl border border-border/70 bg-muted/35 p-3">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="mt-0.5 h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Address</p>
+                          <p className="mt-1 text-sm text-foreground">
+                            {selectedResource.address ?? `${selectedResource.city}, ${selectedResource.state}`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedResource.website ? (
+                    <a
+                      href={selectedResource.website}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-muted/55"
+                    >
+                      <div className="flex items-start gap-2">
+                        <Building2 className="mt-0.5 h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Website</p>
+                          <p className="mt-1 break-all">{selectedResource.website}</p>
+                        </div>
+                      </div>
+                      <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </a>
+                  ) : null}
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="resource-list"
+                initial={{ opacity: 0, x: -28 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 28 }}
+                transition={{ duration: 0.22 }}
+                className="space-y-4"
               >
-                <p className="text-sm font-semibold">{resource.name}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground capitalize">{resource.category.replaceAll("_", " ")}</p>
-              </button>
-            ))}
-          </div>
+                <div className="mb-2 flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-primary" />
+                  <h4 className="font-semibold">Map resources</h4>
+                </div>
+
+                <div className="mb-3 rounded-xl border border-border/70 bg-background/40 p-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={resourceSearchQuery}
+                        onChange={(event) => setResourceSearchQuery(event.target.value)}
+                        placeholder="Search resources"
+                        className="h-9 rounded-lg border-border/70 bg-background pl-9 pr-3"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setResourceFiltersExpanded((current) => !current)}
+                      className={cn(
+                        "h-9 w-9 rounded-lg border border-border/70 bg-background",
+                        resourceFiltersExpanded && "border-primary/50 bg-primary/10 text-primary"
+                      )}
+                    >
+                      <SlidersHorizontal className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <AnimatePresence initial={false}>
+                    {resourceFiltersExpanded ? (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0, marginTop: 0 }}
+                        animate={{ height: "auto", opacity: 1, marginTop: 8 }}
+                        exit={{ height: 0, opacity: 0, marginTop: 0 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="overflow-hidden"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={resourceCategoryFilter}
+                            onValueChange={(value) => setResourceCategoryFilter(value)}
+                          >
+                            <SelectTrigger className="h-9 flex-1 rounded-lg border-border/70 bg-background text-xs uppercase tracking-[0.1em] text-muted-foreground">
+                              <SelectValue placeholder="All categories" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All categories</SelectItem>
+                              {resourceCategoryOptions.map((category) => (
+                                <SelectItem key={category} value={category}>
+                                  {category.replaceAll("_", " ")}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={resourceStateFilter}
+                            onValueChange={(value) => setResourceStateFilter(value)}
+                          >
+                            <SelectTrigger className="h-9 flex-1 rounded-lg border-border/70 bg-background text-xs uppercase tracking-[0.1em] text-muted-foreground">
+                              <SelectValue placeholder="All states" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All states</SelectItem>
+                              {resourceStateOptions.map((state) => (
+                                <SelectItem key={state} value={state.toLowerCase()}>
+                                  {state}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {(resourceSearchQuery || resourceCategoryFilter !== "all" || resourceStateFilter !== "all") ? (
+                            <Button
+                              type="button"
+                              variant="link"
+                              size="sm"
+                              onClick={() => {
+                                setResourceSearchQuery("");
+                                setResourceCategoryFilter("all");
+                                setResourceStateFilter("all");
+                              }}
+                              className="h-9 shrink-0 px-2 text-xs"
+                            >
+                              Clear
+                            </Button>
+                          ) : null}
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
+
+                {activeFilters && !activeFilters.clearFilters ? (
+                  <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
+                    <Badge className="bg-primary/20 text-primary text-xs">
+                      {displayedResources.length} of {run.resources.length} matching
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      onClick={onClearFilter}
+                      className="ml-auto h-auto px-0 text-xs"
+                    >
+                      Clear filter
+                    </Button>
+                  </div>
+                ) : null}
+
+                <div className="rounded-2xl border border-border/70 bg-muted/35 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Show resource pins</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Toggle pins on the map</p>
+                    </div>
+                    <Switch checked={showPins} onCheckedChange={() => onTogglePins()} />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {displayedResources.map((resource) => {
+                    const resourceLogoSource = resolveLogoSource(
+                      resource.logoUrl,
+                      resource.website,
+                      resource.updatedAt,
+                      true
+                    );
+                    const resourceLogoSrc = resourceLogoSource ?? undefined;
+                    const logoKey = `${resource.id}:${resource.updatedAt ?? ""}`;
+                    const showLogoImage = Boolean(resourceLogoSrc) && !logoLoadFailures[logoKey];
+
+                    return (
+                      <button
+                        key={resource.id}
+                        data-resource-id={resource.id}
+                        type="button"
+                        onClick={() => onResourceSelect?.(resource.id)}
+                        className={cn(
+                          "w-full rounded-2xl border px-3 py-2.5 text-left transition-colors",
+                          selectedResourceId === resource.id
+                            ? "border-primary/60 bg-primary/12 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.18)]"
+                            : "border-border/70 bg-muted/35 hover:border-primary/30 hover:bg-muted/55"
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="relative h-8 w-8 shrink-0">
+                            {!showLogoImage ? (
+                              <div
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white"
+                                style={{ backgroundColor: getStartupAvatarColor(resource.name) }}
+                                aria-hidden="true"
+                              >
+                                {getStartupInitial(resource.name)}
+                              </div>
+                            ) : null}
+                            {showLogoImage ? (
+                              <img
+                                src={resourceLogoSrc}
+                                alt={`${resource.name} logo`}
+                                className="absolute inset-0 h-8 w-8 rounded-full bg-background/70 object-contain"
+                                loading="lazy"
+                                onLoad={() => {
+                                  setLogoLoadFailures((previous) => {
+                                    if (!previous[logoKey]) {
+                                      return previous;
+                                    }
+
+                                    const next = { ...previous };
+                                    delete next[logoKey];
+                                    return next;
+                                  });
+                                }}
+                                onError={() => {
+                                  setLogoLoadFailures((previous) => ({ ...previous, [logoKey]: true }));
+                                }}
+                              />
+                            ) : null}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold">{resource.name}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground capitalize">{resource.category.replaceAll("_", " ")}</p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {displayedResources.length === 0 ? (
+                  <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">
+                    No resources match your search criteria.
+                  </div>
+                ) : null}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </TabsContent>
 
     </aside>

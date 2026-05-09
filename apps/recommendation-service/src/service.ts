@@ -7,6 +7,7 @@ import type {
   FounderProfileInput,
   GenerateRecommendationsRequest,
   Recommendation,
+  StartupProfileContext,
   StartupResource
 } from "./types.js";
 import type { RecommendationRepository } from "./repository.js";
@@ -33,6 +34,7 @@ export class RecommendationService {
     founderProfile: FounderProfileInput;
     founderAnalysis: FounderAnalysis;
     resources: StartupResource[];
+    startups?: StartupProfileContext[];
     topN: number;
   }): Promise<Recommendation[]> {
     const ranked = rankRecommendations(params.founderProfile, params.founderAnalysis, params.resources);
@@ -45,6 +47,7 @@ export class RecommendationService {
           founderProfile: params.founderProfile,
           founderAnalysis: params.founderAnalysis,
           resources: params.resources,
+          startups: params.startups ?? [],
           topN: params.topN
         });
 
@@ -84,8 +87,7 @@ export class RecommendationService {
             merged.push({
               ...fallbackItem,
               reason:
-                `Strong fit based on stage (${fallbackItem.scoreBreakdown.stageMatch}), need match ` +
-                `(${fallbackItem.scoreBreakdown.needMatch}), and proximity (${fallbackItem.scoreBreakdown.proximity}).`,
+                `This is a strong fit for your current stage and goals. Here's why you should explore it.`,
               recommendedAction: "Schedule a first outreach with a clear ask tied to your immediate milestone."
             });
           }
@@ -102,10 +104,7 @@ export class RecommendationService {
     const explained = await Promise.all(
       topRanked.map(async (item) => {
         const resource = params.resources.find((r) => r.id === item.resourceId);
-        const generatedReason =
-          `Scored ${item.score.toFixed(2)} with stage=${item.scoreBreakdown.stageMatch}, ` +
-          `needs=${item.scoreBreakdown.needMatch}, industry=${item.scoreBreakdown.industryMatch}, ` +
-          `proximity=${item.scoreBreakdown.proximity}, urgency=${item.scoreBreakdown.urgency}.`;
+        const generatedReason = `This resource ranked #${topRanked.indexOf(item) + 1} based on relevance to your profile and goals.`;
 
         const explanation = await this.intelligenceClient.explainRecommendation({
           founderSummary,
@@ -150,6 +149,7 @@ export class RecommendationService {
       founderProfile: request.founderProfile,
       founderAnalysis,
       resources,
+      startups: [],
       topN: request.topN
     });
 

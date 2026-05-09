@@ -236,6 +236,9 @@ type PinCluster = {
   maxLng: number;
 };
 
+const CLUSTER_RADIUS_PX = 28;
+const CLUSTER_DISABLE_ZOOM = 11;
+
 function getDomainFromUrl(url: string | null): string | null {
   if (!url) {
     return null;
@@ -281,7 +284,11 @@ function resolveLogoSource(
   return null;
 }
 
-function clusterPins(points: MapPin[], map: maplibregl.Map, radiusPx = 36): { clusters: PinCluster[]; singles: MapPin[] } {
+function clusterPins(
+  points: MapPin[],
+  map: maplibregl.Map,
+  radiusPx = CLUSTER_RADIUS_PX
+): { clusters: PinCluster[]; singles: MapPin[] } {
   if (points.length <= 1) {
     return { clusters: [], singles: points };
   }
@@ -493,7 +500,7 @@ export function FounderMap({
     }
 
     // At closer zoom levels, show individual pins instead of forcing cluster bubbles.
-    if (map.getZoom() >= 12) {
+    if (map.getZoom() >= CLUSTER_DISABLE_ZOOM) {
       return { clusters: [] as PinCluster[], singles: allPins };
     }
 
@@ -661,6 +668,15 @@ export function FounderMap({
     return found ? { lat: found.lat, lng: found.lng } : null;
   }, [selectedStartupId, startups]);
 
+  const selectedResourceCoords = useMemo(() => {
+    if (!selectedResourceId) {
+      return null;
+    }
+
+    const found = resources.find((resource) => resource.id === selectedResourceId);
+    return found ? { lat: found.lat, lng: found.lng } : null;
+  }, [selectedResourceId, resources]);
+
   useEffect(() => {
     if (!selectedStartupCoords) {
       return;
@@ -679,6 +695,25 @@ export function FounderMap({
       essential: true
     });
   }, [selectedStartupCoords]);
+
+  useEffect(() => {
+    if (!selectedResourceCoords) {
+      return;
+    }
+
+    const map = instanceRef.current;
+    if (!map) {
+      return;
+    }
+
+    map.flyTo({
+      center: [selectedResourceCoords.lng, selectedResourceCoords.lat],
+      zoom: Math.max(map.getZoom(), 13.5),
+      speed: 1.1,
+      curve: 1.2,
+      essential: true
+    });
+  }, [selectedResourceCoords]);
 
   useEffect(() => {
     const overlay = overlayRef.current;
