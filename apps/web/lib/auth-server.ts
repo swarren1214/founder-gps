@@ -1,6 +1,9 @@
 import { cookies } from "next/headers";
 import { getAuthServiceUrl } from "@/lib/auth-service";
 
+const DEFAULT_AUTH_COOKIE_NAME = "fg_session";
+const AUTH_ME_TIMEOUT_MS = 2500;
+
 export type AuthenticatedUser = {
   user: {
     id: string;
@@ -21,26 +24,33 @@ export type AuthenticatedUser = {
 
 export async function getAuthenticatedUserFromCookies(): Promise<AuthenticatedUser | null> {
   const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((cookie) => `${cookie.name}=${cookie.value}`)
-    .join("; ");
-
-  if (!cookieHeader) {
+  const authCookieName = process.env.AUTH_COOKIE_NAME ?? DEFAULT_AUTH_COOKIE_NAME;
+  const sessionCookie = cookieStore.get(authCookieName);
+  if (!sessionCookie?.value) {
     return null;
   }
 
-  const response = await fetch(`${getAuthServiceUrl()}/auth/me`, {
-    method: "GET",
-    headers: {
-      cookie: cookieHeader
-    },
-    cache: "no-store"
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), AUTH_ME_TIMEOUT_MS);
 
-  if (!response.ok) {
+  try {
+    const response = await fetch(`${getAuthServiceUrl()}/auth/me`, {
+      method: "GET",
+      headers: {
+        cookie: `${authCookieName}=${sessionCookie.value}`
+      },
+      cache: "no-store",
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as AuthenticatedUser;
+  } catch {
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return (await response.json()) as AuthenticatedUser;
 }
