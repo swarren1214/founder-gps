@@ -180,28 +180,40 @@ export function DashboardControls({
   return (
     <aside ref={containerRef} className="bg-card/75 backdrop-blur-lg p-5 h-full w-full overflow-y-scroll">
         <TabsContent value="overview" className="space-y-5">
-          <Card className="overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_10%_10%,rgba(37,99,235,0.35),transparent_45%),linear-gradient(140deg,#062038,#0e4f63_55%,#1f7c75)] text-white shadow-xl">
-            <div className="p-5">
-              <div className="flex items-center justify-between gap-3">
-                <Badge className="border-white/25 bg-white/10 text-white">Founder cockpit</Badge>
-                <p className="text-[11px] uppercase tracking-[0.2em] text-white/70">{founderProfile.locationCity}</p>
-              </div>
-              <CardTitle className="mt-4 text-3xl leading-tight text-white">{founderProfile.locationCity} execution snapshot</CardTitle>
-              <CardDescription className="mt-3 max-w-[32ch] text-base text-white/85">{analysis.suggestedFocus}</CardDescription>
+          <Card className="rounded-2xl border border-border/70 bg-background/45 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base">Profile summary</CardTitle>
+              <Badge className="bg-secondary/15 text-secondary">{founderProfile.locationCity}</Badge>
+            </div>
+            <CardDescription className="mt-2">A quick snapshot of your current founder profile inputs.</CardDescription>
 
-              <div className="mt-6 grid grid-cols-3 gap-3">
-                <div className="rounded-2xl border border-white/15 bg-black/15 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/65">Stage</p>
-                  <p className="mt-1 text-xl font-semibold capitalize text-white">{analysis.stage}</p>
-                </div>
-                <div className="rounded-2xl border border-white/15 bg-black/15 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/65">Confidence</p>
-                  <p className="mt-1 text-xl font-semibold text-white">{Math.round(analysis.confidenceScore * 100)}%</p>
-                </div>
-                <div className="rounded-2xl border border-white/15 bg-black/15 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/65">Top route</p>
-                  <p className="mt-1 text-xl font-semibold text-white">{route ? `${route.totalDriveTimeMinutes}m` : "Pending"}</p>
-                </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Stage</p>
+                <p className="mt-1 text-sm font-semibold capitalize">{founderProfile.stage}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Industry</p>
+                <p className="mt-1 text-sm font-semibold">{founderProfile.industry}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Funding status</p>
+                <p className="mt-1 text-sm font-semibold">{founderProfile.fundingStatus}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Location</p>
+                <p className="mt-1 text-sm font-semibold">{founderProfile.locationCity}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Idea</p>
+                <p className="mt-1 text-sm text-foreground/90">{founderProfile.idea}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Current challenge</p>
+                <p className="mt-1 text-sm text-foreground/90">{founderProfile.challenge}</p>
               </div>
             </div>
           </Card>

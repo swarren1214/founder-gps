@@ -65,23 +65,61 @@ async function fetchWithTimeout(
 }
 
 async function fetchResources(input: FounderIntake, requestId: string): Promise<StartupResource[]> {
-  const query = new URLSearchParams();
-  query.set("limit", String(Math.max(input.topN * 4, 16)));
-  if (input.category) query.set("category", input.category);
-  if (input.cityFilter) query.set("city", input.cityFilter);
-  query.set("stage", input.stage);
-  query.set("industry", input.industry);
-  query.set("lat", String(input.locationLat));
-  query.set("lng", String(input.locationLng));
-  query.set("radiusMiles", "75");
+  const strictQuery = new URLSearchParams();
+  strictQuery.set("limit", String(Math.max(input.topN * 4, 16)));
+  if (input.category) strictQuery.set("category", input.category);
+  if (input.cityFilter) strictQuery.set("city", input.cityFilter);
+  strictQuery.set("stage", input.stage);
+  strictQuery.set("industry", input.industry);
+  strictQuery.set("lat", String(input.locationLat));
+  strictQuery.set("lng", String(input.locationLng));
+  strictQuery.set("radiusMiles", "75");
 
-  const response = await fetchWithTimeout(
-    `${serviceConfig.resource}/resources?${query.toString()}`,
+  const strictResponse = await fetchWithTimeout(
+    `${serviceConfig.resource}/resources?${strictQuery.toString()}`,
     { timeout: 8000 },
     requestId
   );
-  const payload = await parseJson(response);
-  return payload.resources;
+  const strictPayload = await parseJson(strictResponse);
+  const strictResources = Array.isArray(strictPayload.resources)
+    ? (strictPayload.resources as StartupResource[])
+    : [];
+
+  // When strict matching returns too few records, broaden the pool so the Resources tab
+  // and map remain populated while recommendations still prioritize strict-fit entries.
+  if (strictResources.length >= 12) {
+    return strictResources;
+  }
+
+  const broadQuery = new URLSearchParams();
+  broadQuery.set("limit", "500");
+  if (input.category) broadQuery.set("category", input.category);
+  if (input.cityFilter) broadQuery.set("city", input.cityFilter);
+  broadQuery.set("lat", String(input.locationLat));
+  broadQuery.set("lng", String(input.locationLng));
+  broadQuery.set("radiusMiles", "250");
+
+  const broadResponse = await fetchWithTimeout(
+    `${serviceConfig.resource}/resources?${broadQuery.toString()}`,
+    { timeout: 8000 },
+    requestId
+  );
+  const broadPayload = await parseJson(broadResponse);
+  const broadResources = Array.isArray(broadPayload.resources)
+    ? (broadPayload.resources as StartupResource[])
+    : [];
+
+  const mergedById = new Map<string, StartupResource>();
+  for (const resource of strictResources) {
+    mergedById.set(resource.id, resource);
+  }
+  for (const resource of broadResources) {
+    if (!mergedById.has(resource.id)) {
+      mergedById.set(resource.id, resource);
+    }
+  }
+
+  return Array.from(mergedById.values());
 }
 
 async function fetchStartups(_input: FounderIntake, requestId: string): Promise<StartupProfile[]> {
