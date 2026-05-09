@@ -248,18 +248,40 @@ function getDomainFromUrl(url: string | null): string | null {
   }
 }
 
-function resolveLogoSource(logoUrl: string | null, website: string | null, strict = true): string | null {
+function appendVersionParam(url: string, versionToken: string | null): string {
+  if (!versionToken) {
+    return url;
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${encodeURIComponent(versionToken)}`;
+}
+
+function resolveLogoSource(
+  logoUrl: string | null,
+  website: string | null,
+  updatedAt: string | null,
+  strict = true
+): string | null {
+  const versionToken = updatedAt ? String(Date.parse(updatedAt) || updatedAt) : null;
+
   if (logoUrl?.startsWith("/")) {
-    return logoUrl;
+    return appendVersionParam(logoUrl, versionToken);
   }
 
   const domain = getDomainFromUrl(website);
   if (logoUrl) {
-    return `/api/logo?src=${encodeURIComponent(logoUrl)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}&size=64${strict ? "&strict=1" : ""}`;
+    return appendVersionParam(
+      `/api/logo?src=${encodeURIComponent(logoUrl)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}&size=64${strict ? "&strict=1" : ""}`,
+      versionToken
+    );
   }
 
   if (domain) {
-    return `/api/logo?domain=${encodeURIComponent(domain)}&size=64${strict ? "&strict=1" : ""}`;
+    return appendVersionParam(
+      `/api/logo?domain=${encodeURIComponent(domain)}&size=64${strict ? "&strict=1" : ""}`,
+      versionToken
+    );
   }
 
   return null;
@@ -482,7 +504,7 @@ export function FounderMap({
       startups
         .filter((startup): startup is StartupProfileData & { lat: number; lng: number } => startup.lat !== null && startup.lng !== null)
         .map(async (startup) => {
-          const proxiedLogoUrl = resolveLogoSource(startup.logoUrl, startup.website, true);
+          const proxiedLogoUrl = resolveLogoSource(startup.logoUrl, startup.website, startup.updatedAt, true);
           const pinIconUrl = await buildPinIcon(proxiedLogoUrl, true, startup.name);
           return {
             id: startup.id,
@@ -508,7 +530,7 @@ export function FounderMap({
 
     Promise.all(
       resources.map(async (resource) => {
-        const logoUrl = resolveLogoSource(resource.logoUrl, resource.website, true);
+        const logoUrl = resolveLogoSource(resource.logoUrl, resource.website, resource.updatedAt, true);
         const isRecommended = recommendedIds.has(resource.id);
         const pinIconUrl = await buildPinIcon(logoUrl, isRecommended, resource.name);
         return { ...resource, pinIconUrl };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Building2, Compass, MapPin, RefreshCw, Route, Sparkles, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,58 @@ function getStartupInitial(name: string): string {
   return trimmed.length > 0 ? trimmed[0].toUpperCase() : "?";
 }
 
+function getDomainFromUrl(url: string | null): string | null {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function appendVersionParam(url: string, versionToken: string | null): string {
+  if (!versionToken) {
+    return url;
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${encodeURIComponent(versionToken)}`;
+}
+
+function resolveLogoSource(
+  logoUrl: string | null,
+  website: string | null,
+  updatedAt: string | null,
+  strict = true
+): string | null {
+  const versionToken = updatedAt ? String(Date.parse(updatedAt) || updatedAt) : null;
+
+  if (logoUrl?.startsWith("/")) {
+    return appendVersionParam(logoUrl, versionToken);
+  }
+
+  const domain = getDomainFromUrl(website);
+  if (logoUrl) {
+    return appendVersionParam(
+      `/api/logo?src=${encodeURIComponent(logoUrl)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}&size=64${strict ? "&strict=1" : ""}`,
+      versionToken
+    );
+  }
+
+  if (domain) {
+    return appendVersionParam(
+      `/api/logo?domain=${encodeURIComponent(domain)}&size=64${strict ? "&strict=1" : ""}`,
+      versionToken
+    );
+  }
+
+  return null;
+}
+
 export function DashboardControls({
   run,
   isRetrying,
@@ -69,6 +121,7 @@ export function DashboardControls({
   onClearFilter
 }: DashboardControlsProps) {
   const containerRef = useRef<HTMLElement | null>(null);
+  const [logoLoadFailures, setLogoLoadFailures] = useState<Record<string, boolean>>({});
   const { founderProfile, analysis, recommendations, route, roadmap, startups, warnings } = run;
 
   // Filter startups based on activeFilters
@@ -273,7 +326,18 @@ export function DashboardControls({
 
               {filteredStartups.length > 0 ? (
                 <div className="space-y-2">
-                  {filteredStartups.map((startup) => (
+                  {filteredStartups.map((startup) => {
+                    const startupLogoSource = resolveLogoSource(
+                      startup.logoUrl,
+                      startup.website,
+                      startup.updatedAt,
+                      true
+                    );
+                    const startupLogoSrc = startupLogoSource ?? undefined;
+                    const logoKey = `${startup.id}:${startup.updatedAt ?? ""}`;
+                    const showLogoImage = Boolean(startupLogoSrc) && !logoLoadFailures[logoKey];
+
+                    return (
                     <button
                       key={startup.id}
                       data-startup-id={startup.id}
@@ -289,21 +353,34 @@ export function DashboardControls({
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2.5">
                           <div className="relative h-8 w-8 shrink-0">
-                            <div
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold text-white"
-                              style={{ backgroundColor: getStartupAvatarColor(startup.name) }}
-                              aria-hidden="true"
-                            >
-                              {getStartupInitial(startup.name)}
-                            </div>
-                            {startup.logoUrl ? (
+                            {!showLogoImage ? (
+                              <div
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white"
+                                style={{ backgroundColor: getStartupAvatarColor(startup.name) }}
+                                aria-hidden="true"
+                              >
+                                {getStartupInitial(startup.name)}
+                              </div>
+                            ) : null}
+                            {showLogoImage ? (
                               <img
-                                src={startup.logoUrl}
+                                src={startupLogoSrc}
                                 alt={`${startup.name} logo`}
-                                className="absolute inset-0 h-8 w-8 rounded-md bg-background/70 object-contain p-1"
+                                className="absolute inset-0 h-8 w-8 rounded-full bg-background/70 object-contain"
                                 loading="lazy"
-                                onError={(event) => {
-                                  event.currentTarget.style.display = "none";
+                                onLoad={() => {
+                                  setLogoLoadFailures((previous) => {
+                                    if (!previous[logoKey]) {
+                                      return previous;
+                                    }
+
+                                    const next = { ...previous };
+                                    delete next[logoKey];
+                                    return next;
+                                  });
+                                }}
+                                onError={() => {
+                                  setLogoLoadFailures((previous) => ({ ...previous, [logoKey]: true }));
                                 }}
                               />
                             ) : null}
@@ -322,7 +399,8 @@ export function DashboardControls({
                         ) : null}
                       </div>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="rounded-2xl border border-border/70 bg-muted/35 p-3 text-sm text-muted-foreground">

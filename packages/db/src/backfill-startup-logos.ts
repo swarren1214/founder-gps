@@ -176,6 +176,7 @@ function logoDevUrl(domain: string): string {
   const url = new URL(`https://img.logo.dev/${domain}`);
   url.searchParams.set("size", "128");
   url.searchParams.set("format", "png");
+  url.searchParams.set("fallback", "404");
   if (token) {
     url.searchParams.set("token", token);
   }
