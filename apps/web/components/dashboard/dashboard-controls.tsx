@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { filterResources, filterStartups } from "@/lib/map-filters";
+import { RoadmapTaskManager } from "@/components/dashboard/roadmap-task-manager";
 import { TabsContent } from "@/components/ui/tabs";
 import type { FounderFlowResponse, MapFilters } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
@@ -117,7 +118,7 @@ export function DashboardControls({
 }: DashboardControlsProps) {
   const containerRef = useRef<HTMLElement | null>(null);
   const [logoLoadFailures, setLogoLoadFailures] = useState<Record<string, boolean>>({});
-  const { founderProfile, analysis, recommendations, route, roadmap, startups, warnings } = run;
+  const { founderProfile, analysis, recommendations, route, startups, warnings } = run;
 
   const filteredStartups = filterStartups(startups, activeFilters);
   const filteredResources = filterResources(run.resources, activeFilters);
@@ -238,28 +239,9 @@ export function DashboardControls({
         <TabsContent value="roadmap" className="space-y-3">
             <div className="mb-2 flex items-center gap-2">
               <Route className="h-4 w-4 text-primary" />
-              <h4 className="font-semibold">30-day roadmap</h4>
+              <h4 className="font-semibold">Action roadmap</h4>
             </div>
-            {roadmap ? (
-              <div className="space-y-3">
-                {roadmap.weeks.map((week) => (
-                  <div key={week.weekNumber} className="rounded-2xl border border-border/70 bg-muted/35 p-3">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Week {week.weekNumber}</p>
-                    <p className="mt-1 font-semibold">{week.goal}</p>
-                    <ul className="mt-2 space-y-2">
-                      {week.tasks.map((task) => (
-                        <li key={task.title} className="rounded-xl bg-background/80 px-2.5 py-2 text-sm">
-                          <span className="font-semibold">{task.title}</span>
-                          <span className="mt-0.5 block text-xs text-muted-foreground">{task.description}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <CardDescription>No roadmap available yet.</CardDescription>
-            )}
+            <RoadmapTaskManager run={run} />
         </TabsContent>
 
         <TabsContent value="startups" className="space-y-3">

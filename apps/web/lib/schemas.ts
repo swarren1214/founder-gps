@@ -219,6 +219,35 @@ export const mapChatRequestSchema = z.object({
   availableSectors: z.array(z.string())
 });
 
+export const roadmapTaskSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1),
+  timeframe: z.enum(["today", "week", "month"]),
+  completed: z.boolean().default(false),
+  source: z.enum(["ai", "manual"]).default("ai"),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const roadmapTaskPlanSchema = z.object({
+  today: z.array(roadmapTaskSchema).default([]),
+  week: z.array(roadmapTaskSchema).default([]),
+  month: z.array(roadmapTaskSchema).default([]),
+  generatedAt: z.string(),
+  generatedFrom: z.enum(["llm", "manual_seed", "legacy_roadmap"]).default("llm")
+});
+
+export const roadmapGenerateRequestSchema = z.object({
+  founderProfile: founderIntakeSchema,
+  analysis: founderAnalysisSchema,
+  recommendations: z.array(recommendationSchema),
+  resources: z.array(startupResourceSchema)
+});
+
+export const roadmapGenerateResponseSchema = z.object({
+  plan: roadmapTaskPlanSchema
+});
+
 export const chatRequestSchema = z.object({
   sessionId: z.string().min(1),
   userId: z.string().uuid(),
@@ -265,3 +294,7 @@ export type OnboardingContext = z.infer<typeof onboardingContextSchema>;
 export type OnboardingInterviewTurn = z.infer<typeof onboardingInterviewTurnSchema>;
 export type OnboardingInterviewRequest = z.infer<typeof onboardingInterviewRequestSchema>;
 export type OnboardingInterviewResponse = z.infer<typeof onboardingInterviewResponseSchema>;
+export type RoadmapTask = z.infer<typeof roadmapTaskSchema>;
+export type RoadmapTaskPlan = z.infer<typeof roadmapTaskPlanSchema>;
+export type RoadmapGenerateRequest = z.infer<typeof roadmapGenerateRequestSchema>;
+export type RoadmapGenerateResponse = z.infer<typeof roadmapGenerateResponseSchema>;
