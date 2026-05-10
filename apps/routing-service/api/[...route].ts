@@ -37,6 +37,8 @@ async function getApp() {
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
+    const originalUrl = req.url ?? "/";
+    req.url = originalUrl.replace(/^\/api(?=\/|$)/, "") || "/";
     const app = await getApp();
     app.server.emit("request", req, res);
   } catch (error) {
