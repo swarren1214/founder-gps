@@ -1,7 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { Pool } from "pg";
 import { buildApp } from "../src/app.js";
-import { ensureAuthSchema } from "../src/startup.js";
 
 let appInstance: Awaited<ReturnType<typeof buildApp>> | null = null;
 let appInitializationError: Error | null = null;
@@ -13,17 +11,8 @@ async function getApp() {
 
   if (!appInstance) {
     try {
-      const databaseUrl = process.env.DATABASE_URL;
-      // Ensure auth schema is created before initializing the app
-      const pool = new Pool({
-        connectionString: databaseUrl,
-        ssl: { rejectUnauthorized: false }
-      });
-      await ensureAuthSchema(pool);
-      await pool.end();
-
       appInstance = buildApp({
-        databaseUrl,
+        databaseUrl: process.env.DATABASE_URL,
         cookieName: process.env.AUTH_COOKIE_NAME,
         sessionTtlDays: process.env.AUTH_SESSION_TTL_DAYS ? Number(process.env.AUTH_SESSION_TTL_DAYS) : undefined,
         isProduction: process.env.NODE_ENV === "production",
