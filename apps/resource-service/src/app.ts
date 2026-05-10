@@ -13,7 +13,12 @@ export function buildApp(options: AppOptions = {}) {
 
   const repository =
     options.repository ??
-    new PgResourceRepository(new Pool({ connectionString: options.databaseUrl ?? process.env.DATABASE_URL }));
+    new PgResourceRepository(
+      new Pool({
+        connectionString: options.databaseUrl ?? process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+      })
+    );
 
   app.get("/health", async () => ({ ok: true }));
 

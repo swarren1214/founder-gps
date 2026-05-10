@@ -22,7 +22,10 @@ export function buildApp(options: AppOptions = {}) {
   const repository =
     options.repository ??
     new PgIntelligenceRepository(
-      new Pool({ connectionString: options.databaseUrl ?? process.env.DATABASE_URL })
+      new Pool({
+        connectionString: options.databaseUrl ?? process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+      })
     );
 
   const aiService = options.aiService ?? new AiService();
