@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { buildApp } from "../src/app.ts";
+import { buildApp } from "../src/app.js";
 
 let appInstance: Awaited<ReturnType<typeof buildApp>> | null = null;
 let appInitializationError: Error | null = null;
