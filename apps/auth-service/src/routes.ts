@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { parse as parseCookie, serialize as serializeCookie } from "cookie";
-import { sendApiError } from "@founder-gps/shared-types";
+import { sendApiError } from "./api-error.js";
 import { generateSessionToken, hashPassword, hashSessionToken, verifyPassword } from "./auth.js";
 import type { AuthRepository } from "./repository.js";
 import type { AvatarStorageClient } from "./avatar-storage.js";
