@@ -2,11 +2,6 @@
   "version": 2,
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm build",
-  "functions": {
-    "api/[...route].ts": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "routes": [
     {
       "src": "/(.*)",
