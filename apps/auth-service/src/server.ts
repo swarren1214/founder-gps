@@ -5,7 +5,10 @@ import { PgAuthRepository } from "./repository.js";
 import { ensureAuthSchema } from "./startup.js";
 
 async function start() {
-  const pool = new Pool({ connectionString: config.DATABASE_URL });
+  const pool = new Pool({
+    connectionString: config.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
   await ensureAuthSchema(pool);
 
   const app = buildApp({
