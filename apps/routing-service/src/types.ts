@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FOUNDER_STAGES, RESOURCE_CATEGORIES } from "@founder-gps/shared-types";
+import { FOUNDER_STAGES, RESOURCE_CATEGORIES } from "../../../packages/shared-types/dist/index.js";
 
 export const CoordinateSchema = z.object({
   lat: z.number().min(-90).max(90),

@@ -3,7 +3,13 @@
   "builds": [
     {
       "src": "api/[...route].ts",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "src/**",
+          "../../packages/shared-types/dist/**"
+        ]
+      }
     }
   ],
   "routes": [

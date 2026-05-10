@@ -1,4 +1,4 @@
-import { AiService } from "@founder-gps/ai";
+import { AiService } from "../../../packages/ai/dist/index.js";
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
 

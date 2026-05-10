@@ -1,4 +1,4 @@
-import type { FounderStage, ResourceCategory } from "@founder-gps/shared-types";
+import type { FounderStage, ResourceCategory } from "../../../packages/shared-types/dist/index.js";
 
 export type ResourceFilters = {
   category?: ResourceCategory;

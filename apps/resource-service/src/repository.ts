@@ -6,7 +6,7 @@ import type {
   StartupProfile,
   StartupResource,
   CreateStartupProfileInput
-} from "@founder-gps/shared-types";
+} from "../../../packages/shared-types/dist/index.js";
 import type { ResourceFilters, StartupFilters } from "./types.js";
 
 export interface ResourceRepository {
