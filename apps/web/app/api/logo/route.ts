@@ -90,13 +90,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    if (sourceUrl) {
-      const directSource = await fetchImage(sourceUrl);
-      if (directSource?.body) {
-        return toImageResponse(directSource);
-      }
-    }
-
     if (domain) {
       const logoDev = await fetchImage(logoDevUrl(domain, clampedSize));
       if (logoDev?.body) {
@@ -105,6 +98,13 @@ export async function GET(request: NextRequest) {
 
       if (strictMode) {
         return NextResponse.json({ error: "logo not found" }, { status: 404 });
+      }
+    }
+
+    if (sourceUrl) {
+      const directSource = await fetchImage(sourceUrl);
+      if (directSource?.body) {
+        return toImageResponse(directSource);
       }
     }
 

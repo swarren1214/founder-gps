@@ -30,18 +30,7 @@ type AddressSuggestion = {
 };
 
 function apiKeyFromEnv(): string {
-  const key1 = process.env.GEOAPIFY_API_KEY;
-  const key2 = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
-  const result = key1 ?? key2 ?? "";
-  
-  if (!result) {
-    console.error("[Geoapify API Route] NO API KEY FOUND");
-    console.error("[Geoapify API Route] GEOAPIFY_API_KEY:", key1 ? "SET" : "NOT SET");
-    console.error("[Geoapify API Route] NEXT_PUBLIC_GEOAPIFY_API_KEY:", key2 ? "SET" : "NOT SET");
-    console.error("[Geoapify API Route] process.env keys with 'GEOAPIFY':", Object.keys(process.env).filter(k => k.includes("GEOAPIFY")));
-  }
-  
-  return result;
+  return process.env.GEOAPIFY_API_KEY ?? "";
 }
 
 function mapFeature(feature: GeoapifyFeature): AddressSuggestion | null {
@@ -89,8 +78,6 @@ async function fetchJson(url: URL): Promise<GeoapifyFeature[]> {
   }
 
   const payload = (await response.json()) as { features?: GeoapifyFeature[]; results?: GeoapifyFeature[] };
-  console.log("[Geoapify API Route] Request URL:", url.toString());
-  console.log("[Geoapify API Route] Raw response:", JSON.stringify(payload, null, 2));
   
   // Autocomplete returns "results", reverse geocode returns "features"
   const features = Array.isArray(payload.results) ? payload.results : Array.isArray(payload.features) ? payload.features : [];
