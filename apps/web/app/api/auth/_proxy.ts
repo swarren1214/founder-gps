@@ -4,6 +4,29 @@ import { isSameOriginRequest } from "@/lib/request-security";
 
 const AUTH_PROXY_TIMEOUT_MS = 5000;
 
+async function readUpstreamPayload(upstream: Response): Promise<unknown> {
+  const rawBody = await upstream.text();
+  if (rawBody.length === 0) {
+    return { error: "Empty upstream response." };
+  }
+
+  const contentType = upstream.headers.get("content-type")?.toLowerCase() ?? "";
+  const looksLikeJson =
+    contentType.includes("application/json") ||
+    rawBody.trimStart().startsWith("{") ||
+    rawBody.trimStart().startsWith("[");
+
+  if (!looksLikeJson) {
+    return { error: rawBody.slice(0, 400) };
+  }
+
+  try {
+    return JSON.parse(rawBody) as unknown;
+  } catch {
+    return { error: rawBody.slice(0, 400) };
+  }
+}
+
 export async function proxyAuthRequest(request: Request, pathname: string): Promise<NextResponse> {
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ error: { code: "FORBIDDEN", message: "Invalid request origin." } }, { status: 403 });
@@ -47,19 +70,27 @@ export async function proxyAuthRequest(request: Request, pathname: string): Prom
     clearTimeout(timeoutId);
   }
 
-  const contentType = upstream.headers.get("content-type") ?? "";
-  const payload = contentType.includes("application/json")
-    ? await upstream.json()
-    : { error: await upstream.text() };
+  try {
+    const payload = await readUpstreamPayload(upstream);
+    const response = NextResponse.json(payload, { status: upstream.status });
+    response.headers.set("cache-control", "no-store, max-age=0");
+    response.headers.set("pragma", "no-cache");
+    response.headers.set("x-content-type-options", "nosniff");
+    const setCookie = upstream.headers.get("set-cookie");
+    if (setCookie) {
+      response.headers.set("set-cookie", setCookie);
+    }
 
-  const response = NextResponse.json(payload, { status: upstream.status });
-  response.headers.set("cache-control", "no-store, max-age=0");
-  response.headers.set("pragma", "no-cache");
-  response.headers.set("x-content-type-options", "nosniff");
-  const setCookie = upstream.headers.get("set-cookie");
-  if (setCookie) {
-    response.headers.set("set-cookie", setCookie);
+    return response;
+  } catch {
+    return NextResponse.json(
+      {
+        error: {
+          code: "AUTH_PROXY_PARSE_ERROR",
+          message: "Authentication service returned an invalid response."
+        }
+      },
+      { status: 502 }
+    );
   }
-
-  return response;
 }
