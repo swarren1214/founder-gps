@@ -11,7 +11,11 @@ const stylePrefsSchema = z.object({
   tone: z.enum(["concise", "encouraging", "strategic", "technical"]),
   emojiMode: z.enum(["off", "light", "expressive"]),
   verbosity: z.enum(["short", "standard", "deep dive"])
-}).strict();
+}).partial().transform(obj => ({
+  tone: obj.tone ?? "technical",
+  emojiMode: obj.emojiMode ?? "light",
+  verbosity: obj.verbosity ?? "standard"
+}));
 
 const chatRequestSchema = z.object({
   sessionId: z.string().min(1),
