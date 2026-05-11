@@ -6,9 +6,7 @@ import type {
   StartupResource
 } from "../types.js";
 
-const llmResponseSchema: z.ZodType<{
-  recommendations: Array<{ resourceId: string; reason: string; recommendedAction: string }>;
-}> = z.object({
+const llmResponseSchema = z.object({
   recommendations: z.array(
     z.object({
       resourceId: z.string().uuid(),

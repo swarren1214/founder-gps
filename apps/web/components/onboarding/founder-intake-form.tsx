@@ -680,7 +680,6 @@ export function FounderIntakeForm() {
         <aside className="flex h-full flex-col rounded-2xl border border-border/70 bg-muted/35 p-4">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <Badge>Onboarding</Badge>
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{Math.round(progress)}% complete</p>
           </div>
           <div className="flex flex-col gap-3 flex-1">
             {onboardingJourneySteps.map((item, index) => {
@@ -729,10 +728,6 @@ export function FounderIntakeForm() {
               <CardDescription className="mt-2">
                 We will save this context to your profile and personalize your founder workspace.
               </CardDescription>
-            </div>
-            <div className="min-w-30 text-right">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Progress</p>
-              <p className="font-display text-3xl">{Math.round(progress)}%</p>
             </div>
           </div>
 

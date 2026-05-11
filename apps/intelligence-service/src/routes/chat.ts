@@ -7,11 +7,11 @@ import type { StylePrefs } from "@founder-gps/shared-types";
 import type { IntelligenceRepository } from "../repository.js";
 import { buildContextBundle } from "../context-adapter.js";
 
-const stylePrefsSchema: z.ZodType<StylePrefs> = z.object({
+const stylePrefsSchema = z.object({
   tone: z.enum(["concise", "encouraging", "strategic", "technical"]),
   emojiMode: z.enum(["off", "light", "expressive"]),
   verbosity: z.enum(["short", "standard", "deep dive"])
-});
+}).strict();
 
 const chatRequestSchema = z.object({
   sessionId: z.string().min(1),

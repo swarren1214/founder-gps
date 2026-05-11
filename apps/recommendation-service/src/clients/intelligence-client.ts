@@ -28,7 +28,7 @@ const analyzeResponseSchema = z.object({
   analysis: FounderAnalysisSchema
 });
 
-const explainResponseSchema: z.ZodType<{ explanation: { explanation: string; founderAction: string } }> = z.object({
+const explainResponseSchema = z.object({
   explanation: z.object({
     explanation: z.string(),
     founderAction: z.string()
