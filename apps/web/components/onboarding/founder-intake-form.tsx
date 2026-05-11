@@ -643,7 +643,7 @@ export function FounderIntakeForm() {
   }
 
   return (
-    <Card className="relative h-170 border-border/60 bg-card/95 shadow-2xl">
+    <Card className="relative flex h-170 flex-col overflow-hidden border-border/60 bg-card/95 shadow-2xl p-0">
       {submissionPhase >= 0 ? (() => {
         const phase = SUBMISSION_PHASES[Math.min(submissionPhase, SUBMISSION_PHASES.length - 1)];
         const PhaseIcon = phase.icon;
@@ -674,8 +674,10 @@ export function FounderIntakeForm() {
           </div>
         );
       })() : null}
-      <div className="grid gap-6 lg:grid-cols-[300px_1fr] h-full">
-        <aside className="flex flex-col h-full rounded-2xl border border-border/70 bg-muted/35 p-4">
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 p-5 md:p-6">
+          <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[300px_1fr]">
+        <aside className="flex h-full flex-col rounded-2xl border border-border/70 bg-muted/35 p-4">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <Badge>Onboarding</Badge>
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{Math.round(progress)}% complete</p>
@@ -718,7 +720,8 @@ export function FounderIntakeForm() {
           </div>
         </aside>
 
-        <section className="flex flex-col h-full rounded-2xl border border-border/70 bg-background/70 p-5 md:p-6">
+        <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-background/70">
+          <div className="flex h-full min-h-0 flex-1 flex-col p-5 md:p-6">
           <div className="mb-8 flex items-center justify-between gap-4 border-b border-border pb-6">
             <div>
               <Badge>{step.title}</Badge>
@@ -731,10 +734,6 @@ export function FounderIntakeForm() {
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Progress</p>
               <p className="font-display text-3xl">{Math.round(progress)}%</p>
             </div>
-          </div>
-
-          <div className="mb-8 h-3 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-[linear-gradient(90deg,#0f6a74,#ff7a1a)]" style={{ width: `${progress}%` }} />
           </div>
 
           <div className="flex flex-1 min-h-0 flex-wrap content-start items-stretch gap-5 text-foreground">
@@ -1027,45 +1026,66 @@ export function FounderIntakeForm() {
             ) : null}
           </div>
 
-          <div className="mt-auto pt-8">
+          <div className="mt-auto pt-6">
             {error ? <p className="mb-4 text-sm font-medium text-destructive">{error}</p> : null}
 
-            <div className="flex w-full flex-wrap items-center justify-end gap-3">
-              {stepIndex === 4 && interview.length < interviewQuestions.length ? (
-                <form
-                  className="mr-auto flex min-w-80 flex-1 items-center gap-2 rounded-2xl border border-border/70 bg-background/80 p-2 shadow-sm"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void addInterviewAnswer();
-                  }}
+            {stepIndex === 4 && interview.length < interviewQuestions.length ? (
+              <form
+                className="flex min-w-80 flex-1 items-center gap-2 rounded-2xl border border-border/70 bg-background/80 p-2 shadow-sm"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void addInterviewAnswer();
+                }}
+              >
+                <Input
+                  value={chatInput}
+                  onChange={(event) => setChatInput(event.target.value)}
+                  placeholder="Type your answer..."
+                  className="h-10 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
+                />
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  size="icon"
+                  className="h-10 w-10 shrink-0 rounded-xl"
+                  disabled={isInterviewSubmitting || !chatInput.trim()}
+                  aria-label="Send answer"
                 >
-                  <Input
-                    value={chatInput}
-                    onChange={(event) => setChatInput(event.target.value)}
-                    placeholder="Type your answer..."
-                    className="h-10 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
-                  />
-                  <Button
-                    type="submit"
-                    variant="secondary"
-                    size="icon"
-                    className="h-10 w-10 shrink-0 rounded-xl"
-                    disabled={isInterviewSubmitting || !chatInput.trim()}
-                    aria-label="Send answer"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </form>
-              ) : null}
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
+            ) : null}
+          </div>
 
-              <Button variant="default" size="icon" className="flex h-fit w-fit p-4 rounded-full" onClick={previousStep} disabled={stepIndex === 0 || isPending}>
+          </div>
+        </section>
+          </div>
+        </div>
+
+        <footer className="w-full border-t border-border/70 bg-background/80 px-4 py-3 md:px-5">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="min-w-56 flex-1">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Progress</p>
+                <p className="text-xs font-medium text-foreground">{Math.round(progress)}%</p>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-[linear-gradient(90deg,#0f6a74,#ff7a1a)]"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="ml-auto flex items-center gap-3">
+              <Button variant="default" size="icon" className="flex h-fit w-fit rounded-full p-4" onClick={previousStep} disabled={stepIndex === 0 || isPending}>
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               </Button>
               {isLast ? (
                 <Button
                   variant="default"
                   size="icon"
-                  className="flex h-fit w-fit p-4 rounded-full"
+                  className="flex h-fit w-fit rounded-full p-4"
                   onClick={submit}
                   disabled={isPending || !isCurrentStepValid}
                   aria-label={isPending ? "Completing onboarding" : "Complete onboarding"}
@@ -1076,7 +1096,7 @@ export function FounderIntakeForm() {
                 <Button
                   variant="default"
                   size="icon"
-                  className="flex h-fit w-fit p-4 rounded-full"
+                  className="flex h-fit w-fit rounded-full p-4"
                   onClick={nextStep}
                   disabled={!isCurrentStepValid}
                 >
@@ -1085,7 +1105,7 @@ export function FounderIntakeForm() {
               )}
             </div>
           </div>
-        </section>
+        </footer>
       </div>
     </Card>
   );

@@ -16,15 +16,41 @@ export type AppOptions = {
   avatarPublicBaseUrl?: string;
 };
 
+export function resolvePgSslConfig(connectionString: string | undefined): false | { rejectUnauthorized: false } {
+  const sslMode = process.env.PGSSLMODE?.toLowerCase();
+  if (sslMode === "disable") {
+    return false;
+  }
+
+  if (connectionString) {
+    if (/(?:\?|&)sslmode=disable(?:&|$)/i.test(connectionString)) {
+      return false;
+    }
+
+    try {
+      const hostname = new URL(connectionString).hostname;
+      if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+        return false;
+      }
+    } catch {
+      // Keep SSL enabled by default when connection string parsing fails.
+    }
+  }
+
+  return { rejectUnauthorized: false };
+}
+
 export function buildApp(options: AppOptions = {}) {
   const app = Fastify({ logger: true, trustProxy: true });
+
+  const connectionString = options.databaseUrl ?? process.env.DATABASE_URL;
 
   const repository =
     options.repository ??
     new PgAuthRepository(
       new Pool({
-        connectionString: options.databaseUrl ?? process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false }
+        connectionString,
+        ssl: resolvePgSslConfig(connectionString)
       })
     );
 

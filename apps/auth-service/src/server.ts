@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { buildApp } from "./app.js";
+import { buildApp, resolvePgSslConfig } from "./app.js";
 import { config } from "./config.js";
 import { PgAuthRepository } from "./repository.js";
 import { ensureAuthSchema } from "./startup.js";
@@ -7,7 +7,7 @@ import { ensureAuthSchema } from "./startup.js";
 async function start() {
   const pool = new Pool({
     connectionString: config.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: resolvePgSslConfig(config.DATABASE_URL)
   });
   await ensureAuthSchema(pool);
 

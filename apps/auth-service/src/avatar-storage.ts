@@ -17,6 +17,21 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   gif: "image/gif"
 };
 
+function resolveBaseDirectory(baseDirectory: string): string {
+  if (path.isAbsolute(baseDirectory)) {
+    return baseDirectory;
+  }
+
+  // Vercel/AWS Lambda only allows writing to /tmp.
+  const isServerless = process.env.VERCEL === "1" || process.env.AWS_EXECUTION_ENV?.includes("AWS_Lambda");
+  if (!isServerless) {
+    return baseDirectory;
+  }
+
+  const normalized = baseDirectory.replace(/^\.?\//, "");
+  return path.join("/tmp", normalized || "avatars");
+}
+
 export type StoredAvatar = {
   storageKey: string;
   url: string;
@@ -40,14 +55,15 @@ export class LocalAvatarStorageClient implements AvatarStorageClient {
   ) {}
 
   async saveAvatar(params: { userId: string; mimeType: string; data: Buffer }): Promise<StoredAvatar> {
+    const baseDirectory = resolveBaseDirectory(this.baseDirectory);
     const extension = MIME_TO_EXTENSION[params.mimeType];
     if (!extension) {
       throw new Error("Unsupported avatar mime type.");
     }
 
-    await mkdir(this.baseDirectory, { recursive: true });
+    await mkdir(baseDirectory, { recursive: true });
     const storageKey = `${params.userId}-${randomUUID()}.${extension}`;
-    const filePath = path.join(this.baseDirectory, storageKey);
+    const filePath = path.join(baseDirectory, storageKey);
     await writeFile(filePath, params.data);
 
     return {
@@ -57,8 +73,9 @@ export class LocalAvatarStorageClient implements AvatarStorageClient {
   }
 
   async readAvatar(storageKey: string): Promise<StoredAvatarContent | null> {
+    const baseDirectory = resolveBaseDirectory(this.baseDirectory);
     const safeKey = path.basename(storageKey);
-    const filePath = path.join(this.baseDirectory, safeKey);
+    const filePath = path.join(baseDirectory, safeKey);
 
     try {
       const data = await readFile(filePath);
@@ -73,8 +90,9 @@ export class LocalAvatarStorageClient implements AvatarStorageClient {
   }
 
   async deleteAvatar(storageKey: string): Promise<void> {
+    const baseDirectory = resolveBaseDirectory(this.baseDirectory);
     const safeKey = path.basename(storageKey);
-    const filePath = path.join(this.baseDirectory, safeKey);
+    const filePath = path.join(baseDirectory, safeKey);
     try {
       await unlink(filePath);
     } catch {

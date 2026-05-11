@@ -158,11 +158,13 @@ export class PgAuthRepository implements AuthRepository {
       );
 
       const user = toAuthUser(userInsert.rows[0]);
+      const emailLocalPart = user.email.split("@")[0]?.trim();
+      const fallbackDisplayName = emailLocalPart && emailLocalPart.length > 0 ? emailLocalPart : user.email;
 
       const profileInsert = await client.query(
         `
-          INSERT INTO user_profiles (user_id)
-          VALUES ($1)
+          INSERT INTO user_profiles (user_id, display_name)
+          VALUES ($1, $2)
           RETURNING
             id,
             user_id,
@@ -180,7 +182,7 @@ export class PgAuthRepository implements AuthRepository {
             created_at,
             updated_at
         `,
-        [user.id]
+        [user.id, fallbackDisplayName]
       );
 
       const profile = toUserProfile(profileInsert.rows[0]);
