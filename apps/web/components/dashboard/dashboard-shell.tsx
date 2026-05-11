@@ -125,9 +125,29 @@ export function DashboardShell() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(existingRun.founderProfile)
           });
-          const payload = await response.json();
+
+          const rawBody = await response.text();
+          let payload: unknown = null;
+          if (rawBody.length > 0) {
+            try {
+              payload = JSON.parse(rawBody);
+            } catch {
+              const message = rawBody.slice(0, 180).replace(/\s+/g, " ").trim();
+              throw new Error(
+                message ? `Founder flow endpoint returned non-JSON response: ${message}` : "Founder flow endpoint returned non-JSON response."
+              );
+            }
+          }
+
           if (!response.ok) {
-            throw new Error(payload.error ?? "Retry failed.");
+            const errorMessage =
+              payload &&
+              typeof payload === "object" &&
+              "error" in payload &&
+              typeof (payload as { error?: unknown }).error === "string"
+                ? (payload as { error: string }).error
+                : "Retry failed.";
+            throw new Error(errorMessage);
           }
 
           const parsed = founderFlowResponseSchema.parse(payload);

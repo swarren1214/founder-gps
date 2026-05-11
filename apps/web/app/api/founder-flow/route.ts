@@ -21,9 +21,31 @@ function generateRequestId(): string {
 }
 
 async function parseJson(response: Response) {
-  const payload = await response.json();
+  const rawBody = await response.text();
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+
+  let payload: unknown = null;
+  if (rawBody.length > 0) {
+    const looksLikeJson =
+      contentType.includes("application/json") ||
+      rawBody.trimStart().startsWith("{") ||
+      rawBody.trimStart().startsWith("[");
+
+    if (looksLikeJson) {
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        const truncatedBody = rawBody.slice(0, 180).replace(/\s+/g, " ").trim();
+        throw new Error(
+          `Upstream returned invalid JSON (status ${response.status}${truncatedBody ? `): ${truncatedBody}` : ")"}`
+        );
+      }
+    }
+  }
+
   if (!response.ok) {
-    const maybeError = payload?.error;
+    const payloadRecord = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+    const maybeError = payloadRecord?.error;
     if (typeof maybeError === "string") {
       throw new Error(maybeError);
     }
@@ -37,8 +59,18 @@ async function parseJson(response: Response) {
       throw new Error(`${code}: ${message}${details}`);
     }
 
-    throw new Error(`Request failed with ${response.status}`);
+    const truncatedBody = rawBody.slice(0, 180).replace(/\s+/g, " ").trim();
+    throw new Error(
+      truncatedBody
+        ? `Request failed with ${response.status}: ${truncatedBody}`
+        : `Request failed with ${response.status}`
+    );
   }
+
+  if (payload === null) {
+    throw new Error(`Expected JSON response but got empty/non-JSON body (status ${response.status})`);
+  }
+
   return payload;
 }
 
