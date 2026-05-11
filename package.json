@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=4096' node scripts/dev-with-infra.mjs",
     "dev:apps": "turbo run dev --parallel",
+    "postinstall": "pnpm --filter @founder-gps/shared-types build && pnpm --filter @founder-gps/ai build",
     "lint": "pnpm typecheck",
     "build": "turbo run build",
     "test": "turbo run test",
