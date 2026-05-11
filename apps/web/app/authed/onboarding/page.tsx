@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FounderIntakeForm } from "@/components/onboarding/founder-intake-form";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,11 @@ import { LogOut, Moon, Sun } from "lucide-react";
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { resolvedTheme, setTheme } = useTheme();
   const { isLoading, authUser } = useAuthUser();
   const isOnboarded = authUser?.profile.onboardingStatus === "completed";
+  const allowResume = searchParams.get("resume") === "1";
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -22,16 +24,16 @@ export default function OnboardingPage() {
   }, []);
 
   useEffect(() => {
-    if (!isLoading && isOnboarded) {
+    if (!isLoading && isOnboarded && !allowResume) {
       router.replace("/authed/dashboard");
     }
-  }, [isLoading, isOnboarded, router]);
+  }, [isLoading, isOnboarded, allowResume, router]);
 
   if (isLoading) {
     return <OnboardingScreenSkeleton />;
   }
 
-  if (!isLoading && isOnboarded) {
+  if (!isLoading && isOnboarded && !allowResume) {
     return (
       <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-secondary px-5 py-10 md:px-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,hsl(var(--primary)/0.18),transparent_35%),radial-gradient(circle_at_84%_16%,hsl(var(--card)),transparent_30%)]" />

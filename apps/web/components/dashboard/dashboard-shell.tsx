@@ -76,8 +76,13 @@ export function DashboardShell() {
   useEffect(() => {
     if (!isLoading && !isOnboarded) {
       router.replace("/authed/onboarding");
+      return;
     }
-  }, [isLoading, isOnboarded, router]);
+
+    if (!isLoading && isOnboarded && !currentRun) {
+      router.replace("/authed/onboarding?resume=1");
+    }
+  }, [isLoading, isOnboarded, currentRun, router]);
 
   useEffect(() => {
     setSelectedStartupId((existingId) => {
@@ -98,7 +103,7 @@ export function DashboardShell() {
       <Card>
         <CardTitle>Redirecting to onboarding...</CardTitle>
         <CardDescription className="mt-3">
-          No founder run was found for this session.
+          No founder run was found for this session. Preparing onboarding to regenerate your plan.
         </CardDescription>
       </Card>
     );
