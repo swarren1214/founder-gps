@@ -28,13 +28,58 @@ export function DashboardShell() {
   const [activeFilters, setActiveFilters] = useState<MapFilters | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const hasAttemptedStartupHydration = useRef(false);
+  const hasAttemptedResourceHydration = useRef(false);
 
   useEffect(() => {
     if (run) {
       hasAttemptedStartupHydration.current = false;
+      hasAttemptedResourceHydration.current = false;
       setCurrentRun(run);
     }
   }, [run]);
+
+  useEffect(() => {
+    if (!currentRun || currentRun.resources.length > 0 || hasAttemptedResourceHydration.current) {
+      return;
+    }
+
+    hasAttemptedResourceHydration.current = true;
+
+    const hydrateResources = async () => {
+      try {
+        const query = new URLSearchParams();
+        query.set("limit", "500");
+        query.set("lat", String(currentRun.founderProfile.locationLat));
+        query.set("lng", String(currentRun.founderProfile.locationLng));
+        query.set("radiusMiles", "250");
+
+        const response = await fetch(`/api/resources?${query.toString()}`, { cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Failed to load resources.");
+        }
+
+        if (!Array.isArray(payload.resources) || payload.resources.length === 0) {
+          return;
+        }
+
+        setCurrentRun((existing) => {
+          if (!existing) {
+            return existing;
+          }
+
+          const mergedRun = { ...existing, resources: payload.resources };
+          saveDashboardRun(mergedRun);
+          return mergedRun;
+        });
+      } catch (hydrateError) {
+        const message = hydrateError instanceof Error ? hydrateError.message : "Failed to load resources.";
+        toast.error(message);
+      }
+    };
+
+    void hydrateResources();
+  }, [currentRun]);
 
   useEffect(() => {
     if (!currentRun || currentRun.startups.length > 0 || hasAttemptedStartupHydration.current) {
