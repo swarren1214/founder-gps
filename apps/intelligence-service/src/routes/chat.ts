@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { AiService, ChatOutputSchema } from "../../../../packages/ai/dist/index.js";
-import { sendApiError } from "../../../../packages/shared-types/dist/index.js";
+import { AiService, ChatOutputSchema } from "@founder-gps/ai";
+import { sendApiError } from "@founder-gps/shared-types";
 import { z } from "zod";
 import type { IntelligenceRepository } from "../repository.js";
 import { buildContextBundle } from "../context-adapter.js";

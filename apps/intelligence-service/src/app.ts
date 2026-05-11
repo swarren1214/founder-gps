@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import { Pool } from "pg";
-import { AiService } from "../../../packages/ai/dist/index.js";
+import { AiService } from "@founder-gps/ai";
 import { intelligenceRoutes } from "./routes/intelligence.js";
 import {
   PgIntelligenceRepository,

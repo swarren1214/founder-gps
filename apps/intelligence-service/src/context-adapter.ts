@@ -1,11 +1,11 @@
 import crypto from "node:crypto";
-import { FOUNDER_STAGES } from "../../../packages/shared-types/dist/index.js";
+import { FOUNDER_STAGES } from "@founder-gps/shared-types";
 import type {
   ChatContextBundle,
   FounderStage,
   FounderProfileContext,
   StylePrefs
-} from "../../../packages/shared-types/dist/index.js";
+} from "@founder-gps/shared-types";
 import type { IntelligenceRepository } from "./repository.js";
 
 type ContextAdapterOptions = {

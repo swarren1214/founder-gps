@@ -1,6 +1,6 @@
 import { Pool } from "pg";
-import type { AiMetadata } from "../../../packages/ai/dist/index.js";
-import type { ChatCitation, ChatMessage } from "../../../packages/shared-types/dist/index.js";
+import type { AiMetadata } from "@founder-gps/ai";
+import type { ChatCitation, ChatMessage } from "@founder-gps/shared-types";
 
 export type AnalysisSnapshot = {
   id: string;

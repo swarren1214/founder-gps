@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { FOUNDER_STAGES, RESOURCE_CATEGORIES } from "../../../../packages/shared-types/dist/index.js";
-import { sendApiError } from "../../../../packages/shared-types/dist/index.js";
-import type { CreateStartupProfileInput, StartupOnboardingContext } from "../../../../packages/shared-types/dist/index.js";
+import { FOUNDER_STAGES, RESOURCE_CATEGORIES, sendApiError } from "@founder-gps/shared-types";
+import type { CreateStartupProfileInput, StartupOnboardingContext } from "@founder-gps/shared-types";
 import type { FastifyInstance } from "fastify";
 import type { ResourceRepository } from "../repository.js";
 

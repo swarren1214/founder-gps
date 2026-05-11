@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { sendApiError } from "../../../../packages/shared-types/dist/index.js";
+import { sendApiError } from "@founder-gps/shared-types";
 import {
   FounderPathRequestSchema,
   MatrixRequestSchema,

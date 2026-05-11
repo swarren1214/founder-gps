@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FOUNDER_STAGES } from "../../../../packages/shared-types/dist/index.js";
+import { FOUNDER_STAGES } from "@founder-gps/shared-types";
 import {
   FounderAnalysisSchema,
   type FounderAnalysis

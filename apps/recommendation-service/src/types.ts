@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FOUNDER_STAGES, RESOURCE_CATEGORIES } from "../../../packages/shared-types/dist/index.js";
+import { FOUNDER_STAGES, RESOURCE_CATEGORIES } from "@founder-gps/shared-types";
 
 export const FounderProfileInputSchema = z.object({
   founderProfileId: z.string().uuid(),

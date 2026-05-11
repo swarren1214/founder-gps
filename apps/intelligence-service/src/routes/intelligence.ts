@@ -6,8 +6,8 @@ import {
   FounderAnalysisInputSchema,
   RoadmapInputSchema,
   MapChatInputSchema
-} from "../../../../packages/ai/dist/index.js";
-import { sendApiError } from "../../../../packages/shared-types/dist/index.js";
+} from "@founder-gps/ai";
+import { sendApiError } from "@founder-gps/shared-types";
 import type { IntelligenceRepository } from "../repository.js";
 import { chatRoutes } from "./chat.js";
 
