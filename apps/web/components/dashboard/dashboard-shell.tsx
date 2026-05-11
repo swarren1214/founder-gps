@@ -76,13 +76,8 @@ export function DashboardShell() {
   useEffect(() => {
     if (!isLoading && !isOnboarded) {
       router.replace("/authed/onboarding");
-      return;
     }
-
-    if (!isLoading && isOnboarded && !currentRun) {
-      router.replace("/authed/onboarding?resume=1");
-    }
-  }, [isLoading, isOnboarded, currentRun, router]);
+  }, [isLoading, isOnboarded, router]);
 
   useEffect(() => {
     setSelectedStartupId((existingId) => {
