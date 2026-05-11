@@ -7,6 +7,7 @@ import { founderFlowResponseSchema, type FounderFlowResponse, type MapFilters } 
 import { saveDashboardRun } from "@/lib/session";
 import { trackEvent } from "@/lib/analytics";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { FounderMap } from "@/components/map/founder-map";
 import { DashboardControls } from "@/components/dashboard/dashboard-controls";
 import { MapChat } from "@/components/dashboard/map-chat";
@@ -141,10 +142,14 @@ export function DashboardShell() {
   if (!isOnboarded || !currentRun) {
     return (
       <Card>
-        <CardTitle>Redirecting to onboarding...</CardTitle>
+        <CardTitle>Restoring your dashboard...</CardTitle>
         <CardDescription className="mt-3">
-          No founder run was found for this session. Preparing onboarding to regenerate your plan.
+          We could not find a saved founder run for this session. Try restoring your plan, or continue to onboarding resume.
         </CardDescription>
+        <div className="mt-4 flex gap-2">
+          <Button onClick={() => router.refresh()}>Retry restore</Button>
+          <Button variant="outline" onClick={() => router.push("/authed/onboarding?resume=1")}>Open onboarding resume</Button>
+        </div>
       </Card>
     );
   }

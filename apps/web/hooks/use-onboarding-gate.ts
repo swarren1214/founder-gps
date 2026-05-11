@@ -90,6 +90,89 @@ export function buildFounderIntakeFromAuthUser(authUser: AuthUserPayload) {
   };
 }
 
+async function parseJson(response: Response) {
+  const payload = await response.json();
+  if (!response.ok) {
+    const maybeError = payload?.error;
+    if (typeof maybeError === "string") {
+      throw new Error(maybeError);
+    }
+
+    if (maybeError && typeof maybeError === "object") {
+      const code = "code" in maybeError ? String(maybeError.code) : "UNKNOWN_ERROR";
+      const message = "message" in maybeError ? String(maybeError.message) : `Request failed with ${response.status}`;
+      throw new Error(`${code}: ${message}`);
+    }
+
+    throw new Error(`Request failed with ${response.status}`);
+  }
+
+  return payload;
+}
+
+async function buildFallbackRun(authUser: AuthUserPayload): Promise<FounderFlowResponse | null> {
+  const intakeResult = founderIntakeSchema.safeParse(buildFounderIntakeFromAuthUser(authUser));
+  if (!intakeResult.success) {
+    return null;
+  }
+
+  const founderProfile = intakeResult.data;
+
+  let resources: unknown[] = [];
+  let startups: unknown[] = [];
+  const warnings: string[] = ["Could not restore your saved founder plan. Showing a fallback dashboard."];
+
+  try {
+    const query = new URLSearchParams();
+    query.set("limit", "500");
+    query.set("lat", String(founderProfile.locationLat));
+    query.set("lng", String(founderProfile.locationLng));
+    query.set("radiusMiles", "250");
+
+    const resourcesResponse = await fetch(`/api/resources?${query.toString()}`, { cache: "no-store" });
+    const resourcesPayload = await parseJson(resourcesResponse);
+    resources = Array.isArray(resourcesPayload.resources) ? resourcesPayload.resources : [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Resource hydration failed.";
+    warnings.push(`Resources unavailable: ${message}`);
+  }
+
+  try {
+    const startupsResponse = await fetch("/api/startups?limit=1000", { cache: "no-store" });
+    const startupsPayload = await parseJson(startupsResponse);
+    startups = Array.isArray(startupsPayload.startups) ? startupsPayload.startups : [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Startup hydration failed.";
+    warnings.push(`Startups unavailable: ${message}`);
+  }
+
+  const parsedFallback = founderFlowResponseSchema.safeParse({
+    founderProfile,
+    analysis: {
+      stage: founderProfile.stage,
+      primaryNeeds: ["customer discovery"],
+      secondaryNeeds: [],
+      industry: founderProfile.industry,
+      founderType: "self-directed",
+      confidenceScore: 0.5,
+      suggestedFocus: "Review nearby resources and refine your next milestone.",
+      risks: []
+    },
+    recommendations: [],
+    route: null,
+    roadmap: null,
+    resources,
+    startups,
+    warnings
+  });
+
+  if (!parsedFallback.success) {
+    return null;
+  }
+
+  return parsedFallback.data;
+}
+
 export function useOnboardingGate(): OnboardingGateState {
   const { isLoading: isAuthLoading, authUser } = useAuthUser();
   const [state, setState] = useState<OnboardingGateState>({
@@ -151,7 +234,14 @@ export function useOnboardingGate(): OnboardingGateState {
           setState({ isLoading: false, isOnboarded: true, run: validated });
         }
       } catch {
+        const fallbackRun = await buildFallbackRun(authUser);
         if (!cancelled) {
+          if (fallbackRun) {
+            saveDashboardRun(fallbackRun);
+            setState({ isLoading: false, isOnboarded: true, run: fallbackRun });
+            return;
+          }
+
           setState({ isLoading: false, isOnboarded: true, run: null });
         }
       }
