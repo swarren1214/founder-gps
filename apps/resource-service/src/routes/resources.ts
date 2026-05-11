@@ -78,7 +78,16 @@ export async function resourceRoutes(app: FastifyInstance, repository: ResourceR
         : undefined;
 
       const startupInput: CreateStartupProfileInput = {
-        ...parsed.data,
+        name: parsed.data.name,
+        website: parsed.data.website,
+        employees: parsed.data.employees,
+        sector: parsed.data.sector,
+        yearFounded: parsed.data.yearFounded,
+        description: parsed.data.description,
+        address: parsed.data.address,
+        stage: parsed.data.stage,
+        dateFounded: parsed.data.dateFounded,
+        phone: parsed.data.phone,
         onboardingContext
       };
 

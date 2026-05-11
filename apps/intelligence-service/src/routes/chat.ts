@@ -3,20 +3,21 @@ import type { FastifyInstance } from "fastify";
 import { AiService, ChatOutputSchema } from "@founder-gps/ai";
 import { sendApiError } from "@founder-gps/shared-types";
 import { z } from "zod";
+import type { StylePrefs } from "@founder-gps/shared-types";
 import type { IntelligenceRepository } from "../repository.js";
 import { buildContextBundle } from "../context-adapter.js";
+
+const stylePrefsSchema: z.ZodType<StylePrefs> = z.object({
+  tone: z.enum(["concise", "encouraging", "strategic", "technical"]),
+  emojiMode: z.enum(["off", "light", "expressive"]),
+  verbosity: z.enum(["short", "standard", "deep dive"])
+});
 
 const chatRequestSchema = z.object({
   sessionId: z.string().min(1),
   userId: z.string().uuid(),
   message: z.string().min(1),
-  stylePrefs: z
-    .object({
-      tone: z.enum(["concise", "encouraging", "strategic", "technical"]),
-      emojiMode: z.enum(["off", "light", "expressive"]),
-      verbosity: z.enum(["short", "standard", "deep dive"])
-    })
-    .optional()
+  stylePrefs: stylePrefsSchema.optional()
 });
 
 const chatSessionQuerySchema = z.object({

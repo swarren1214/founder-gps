@@ -15,6 +15,22 @@ const serviceConfig = {
   routing: getRoutingServiceUrl()
 };
 
+type AnalysisPayload = {
+  analysis: {
+    stage: string;
+    primaryNeeds: string[];
+    secondaryNeeds: string[];
+  };
+};
+
+type RecommendationPayload = {
+  recommendations: Array<{
+    resourceId: string;
+    recommendedAction: string;
+    resourceName?: string;
+  }>;
+};
+
 // Generate a unique request ID for traceability across service calls
 function generateRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -118,7 +134,7 @@ async function fetchResources(input: FounderIntake, requestId: string): Promise<
     { timeout: 8000 },
     requestId
   );
-  const strictPayload = await parseJson(strictResponse);
+  const strictPayload = (await parseJson(strictResponse)) as { resources?: unknown };
   const strictResources = Array.isArray(strictPayload.resources)
     ? (strictPayload.resources as StartupResource[])
     : [];
@@ -142,7 +158,7 @@ async function fetchResources(input: FounderIntake, requestId: string): Promise<
     { timeout: 8000 },
     requestId
   );
-  const broadPayload = await parseJson(broadResponse);
+  const broadPayload = (await parseJson(broadResponse)) as { resources?: unknown };
   const broadResources = Array.isArray(broadPayload.resources)
     ? (broadPayload.resources as StartupResource[])
     : [];
@@ -169,8 +185,8 @@ async function fetchStartups(_input: FounderIntake, requestId: string): Promise<
     { timeout: 8000 },
     requestId
   );
-  const payload = await parseJson(response);
-  return payload.startups;
+  const payload = (await parseJson(response)) as { startups?: unknown };
+  return Array.isArray(payload.startups) ? (payload.startups as StartupProfile[]) : [];
 }
 
 export async function POST(request: Request) {
@@ -189,7 +205,7 @@ export async function POST(request: Request) {
     const warnings: string[] = [];
 
     // Step 1: Analyze founder
-    let analysisPayload;
+    let analysisPayload: AnalysisPayload | null = null;
     try {
       const analysisResponse = await fetchWithTimeout(
         `${serviceConfig.intelligence}/intelligence/analyze-founder`,
@@ -210,7 +226,34 @@ export async function POST(request: Request) {
         },
         requestId
       );
-      analysisPayload = await parseJson(analysisResponse);
+      const parsedAnalysis = (await parseJson(analysisResponse)) as { analysis?: unknown };
+      const analysis = parsedAnalysis.analysis;
+
+      if (!analysis || typeof analysis !== "object") {
+        throw new Error("Analysis response missing analysis payload.");
+      }
+
+      const analysisRecord = analysis as {
+        stage?: unknown;
+        primaryNeeds?: unknown;
+        secondaryNeeds?: unknown;
+      };
+
+      if (typeof analysisRecord.stage !== "string") {
+        throw new Error("Analysis response missing stage.");
+      }
+
+      analysisPayload = {
+        analysis: {
+          stage: analysisRecord.stage,
+          primaryNeeds: Array.isArray(analysisRecord.primaryNeeds)
+            ? analysisRecord.primaryNeeds.filter((item): item is string => typeof item === "string")
+            : [],
+          secondaryNeeds: Array.isArray(analysisRecord.secondaryNeeds)
+            ? analysisRecord.secondaryNeeds.filter((item): item is string => typeof item === "string")
+            : []
+        }
+      };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Founder analysis failed";
       return NextResponse.json(
@@ -240,7 +283,7 @@ export async function POST(request: Request) {
     }
 
     // Step 3: Generate recommendations
-    let recommendationPayload;
+    let recommendationPayload: RecommendationPayload | null = null;
     try {
       const recommendationResponse = await fetchWithTimeout(
         `${serviceConfig.recommendation}/recommendations/rank`,
@@ -279,7 +322,19 @@ export async function POST(request: Request) {
         },
         requestId
       );
-      recommendationPayload = await parseJson(recommendationResponse);
+      const parsedRecommendations = (await parseJson(recommendationResponse)) as { recommendations?: unknown };
+      const recommendations = Array.isArray(parsedRecommendations.recommendations)
+        ? parsedRecommendations.recommendations
+            .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+            .filter((item) => typeof item.resourceId === "string" && typeof item.recommendedAction === "string")
+            .map((item) => ({
+              resourceId: item.resourceId as string,
+              recommendedAction: item.recommendedAction as string,
+              resourceName: typeof item.resourceName === "string" ? item.resourceName : undefined
+            }))
+        : [];
+
+      recommendationPayload = { recommendations };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Recommendation generation failed";
       return NextResponse.json(
@@ -339,8 +394,8 @@ export async function POST(request: Request) {
               ...analysisPayload.analysis.secondaryNeeds
             ].slice(0, 5),
             recommendations: recommendationPayload.recommendations.map(
-              (item: { recommendedAction: string; resourceName: string }) =>
-                `${item.resourceName}: ${item.recommendedAction}`
+              (item) =>
+                `${item.resourceName ?? "Resource"}: ${item.recommendedAction}`
             ),
             constraints: [founderProfile.fundingStatus, founderProfile.challenge].filter(Boolean)
           }),
@@ -348,8 +403,8 @@ export async function POST(request: Request) {
         },
         requestId
       );
-      const roadmapPayload = await parseJson(roadmapResponse);
-      roadmap = roadmapPayload.roadmap;
+      const roadmapPayload = (await parseJson(roadmapResponse)) as { roadmap?: unknown };
+      roadmap = roadmapPayload.roadmap ?? null;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Roadmap generation unavailable";
       warnings.push(`⚠️ Roadmap generation unavailable: ${errorMsg}. Use recommendations as action items.`);

@@ -28,7 +28,7 @@ const analyzeResponseSchema = z.object({
   analysis: FounderAnalysisSchema
 });
 
-const explainResponseSchema = z.object({
+const explainResponseSchema: z.ZodType<{ explanation: { explanation: string; founderAction: string } }> = z.object({
   explanation: z.object({
     explanation: z.string(),
     founderAction: z.string()
@@ -94,6 +94,9 @@ export class HttpIntelligenceClient implements IntelligenceClient {
     }
 
     const parsed = explainResponseSchema.parse(await response.json());
-    return parsed.explanation;
+    return {
+      explanation: parsed.explanation.explanation,
+      founderAction: parsed.explanation.founderAction
+    };
   }
 }

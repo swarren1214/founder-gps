@@ -6,7 +6,9 @@ import type {
   StartupResource
 } from "../types.js";
 
-const llmResponseSchema = z.object({
+const llmResponseSchema: z.ZodType<{
+  recommendations: Array<{ resourceId: string; reason: string; recommendedAction: string }>;
+}> = z.object({
   recommendations: z.array(
     z.object({
       resourceId: z.string().uuid(),
@@ -148,9 +150,14 @@ export class OpenAiRecommendationClient implements LlmRecommendationClient {
     }
 
     const parsed = llmResponseSchema.parse(JSON.parse(content));
+    const parsedRecommendations = parsed.recommendations.map((item) => ({
+      resourceId: item.resourceId,
+      reason: item.reason,
+      recommendedAction: item.recommendedAction
+    }));
 
     const unique = new Set<string>();
-    const recommendations = parsed.recommendations.filter((item) => {
+    const recommendations = parsedRecommendations.filter((item) => {
       if (unique.has(item.resourceId)) {
         return false;
       }
