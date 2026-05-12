@@ -33,38 +33,49 @@ export async function intelligenceRoutes(
       return sendApiError(reply, "VALIDATION_ERROR", "Invalid analyze-founder request.", parsed.error.flatten());
     }
 
+    let result: Awaited<ReturnType<typeof aiService.analyzeFounder>>;
     try {
-      const result = await aiService.analyzeFounder(parsed.data);
+      result = await aiService.analyzeFounder(parsed.data);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      app.log.error({ error, msg }, "analyze_founder_ai_failed");
+      return sendApiError(
+        reply,
+        "DEPENDENCY_UNAVAILABLE",
+        `AI analysis failed: ${msg}`
+      );
+    }
+
+    // Snapshot persistence is best-effort — never block the response.
+    let snapshotId: string | null = null;
+    try {
       const snapshot = await repository.saveFounderAnalysisSnapshot({
         founderProfileId: parsed.data.founderProfileId,
         analysis: result.data,
         metadata: result.metadata
       });
-
-      logMetadata(app, "/intelligence/analyze-founder", {
-        provider: result.metadata.provider,
-        model: result.metadata.model,
-        promptVersion: result.metadata.promptVersion,
-        latencyMs: result.metadata.latencyMs,
-        tokensIn: result.metadata.tokensIn,
-        tokensOut: result.metadata.tokensOut,
-        fallbackUsed: result.metadata.fallbackUsed,
-        snapshotId: snapshot.id
-      });
-
-      return reply.send({
-        analysis: result.data,
-        snapshotId: snapshot.id,
-        metadata: result.metadata
-      });
+      snapshotId = snapshot.id;
     } catch (error) {
-      app.log.error({ error }, "analyze_founder_failed");
-      return sendApiError(
-        reply,
-        "DEPENDENCY_UNAVAILABLE",
-        "Intelligence dependency unavailable. Analysis generation or snapshot persistence failed."
-      );
+      const msg = error instanceof Error ? error.message : String(error);
+      app.log.warn({ error, msg }, "analyze_founder_snapshot_failed");
     }
+
+    logMetadata(app, "/intelligence/analyze-founder", {
+      provider: result.metadata.provider,
+      model: result.metadata.model,
+      promptVersion: result.metadata.promptVersion,
+      latencyMs: result.metadata.latencyMs,
+      tokensIn: result.metadata.tokensIn,
+      tokensOut: result.metadata.tokensOut,
+      fallbackUsed: result.metadata.fallbackUsed,
+      snapshotId
+    });
+
+    return reply.send({
+      analysis: result.data,
+      snapshotId,
+      metadata: result.metadata
+    });
   });
 
   app.post("/intelligence/explain-recommendation", async (request, reply) => {

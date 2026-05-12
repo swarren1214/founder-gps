@@ -28,7 +28,15 @@ export function buildApp(options: AppOptions = {}) {
       })
     );
 
-  const aiService = options.aiService ?? new AiService();
+  const aiService =
+    options.aiService ??
+    new AiService({
+      provider: (process.env.AI_PROVIDER as "openai" | "gemini" | "heuristic" | undefined) ?? "heuristic",
+      openAiApiKey: process.env.OPENAI_API_KEY,
+      openAiBaseUrl: process.env.OPENAI_BASE_URL,
+      geminiApiKey: process.env.GEMINI_API_KEY,
+      model: process.env.AI_MODEL
+    });
 
   app.get("/health", async () => ({ ok: true }));
 
